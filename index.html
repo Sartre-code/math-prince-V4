@@ -7,10 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;700;900&family=Noto+Sans+TC:wght@400;500;600&family=Crimson+Pro:ital,wght@0,400;0,600;1,400;1,600&display=swap" rel="stylesheet">
 <style>
-/* ═══════════════════════════════════════════════════════════
-   DESIGN TOKENS — 數學王子的覺醒 v1.0
-   Based on Design Spec v1.1 (B Group UI/UX)
-═══════════════════════════════════════════════════════════ */
+/* ── Design Tokens ── */
 :root {
   --navy-deep:   #1A2D5A;
   --navy-mid:    #2A4A8A;
@@ -22,244 +19,79 @@
   --parchment:   #F9F7F2;
   --paper-white: #FFFFFF;
   --ink-black:   #1A1A1A;
-  --success:     #2D6A4F;
-  --error:       #8B1A1A;
-  --shadow-sm:   0 2px 8px rgba(26,45,90,0.08);
-  --shadow-md:   0 8px 24px rgba(26,45,90,0.12);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body {
-  font-family: 'Noto Sans TC', sans-serif;
-  background-color: var(--parchment);
-  color: var(--ink-black);
-  line-height: 1.6;
-}
+body { font-family: 'Noto Sans TC', sans-serif; background-color: var(--parchment); color: var(--ink-black); }
 
 /* ── Layout ── */
-.app-container {
-  max-width: 1000px;
-  margin: 0 auto;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-/* ── Header ── */
-header {
-  padding: 2.5rem 2rem;
-  text-align: center;
-  background: linear-gradient(to bottom, var(--paper-white), transparent);
-}
-.logo-area h1 {
-  font-family: 'Noto Serif TC', serif;
-  font-weight: 900;
-  font-size: 2.8rem;
-  color: var(--navy-deep);
-  letter-spacing: 0.1em;
-  margin-bottom: 0.5rem;
-}
-.subtitle {
-  font-family: 'Crimson Pro', serif;
-  font-style: italic;
-  font-size: 1.1rem;
-  color: var(--gold-mid);
-  text-transform: uppercase;
-  letter-spacing: 0.2em;
-}
-
-/* ── Dashboard ── */
-.dashboard {
-  display: flex;
-  justify-content: center;
-  gap: 2rem;
-  margin-bottom: 2.5rem;
-}
-.stat-card {
-  background: var(--paper-white);
-  padding: 1rem 2rem;
-  border-radius: 12px;
-  box-shadow: var(--shadow-sm);
-  border-bottom: 3px solid var(--gold);
-  text-align: center;
-}
-.stat-label { font-size: 0.85rem; color: var(--navy-mid); font-weight: 600; margin-bottom: 0.2rem; }
-.stat-value { font-size: 1.8rem; font-weight: 700; color: var(--navy-deep); font-family: 'Crimson Pro', serif; }
+.app-container { max-width: 1000px; margin: 0 auto; min-height: 100vh; padding: 2rem; }
+header { text-align: center; margin-bottom: 3rem; }
+h1 { font-family: 'Noto Serif TC', serif; font-size: 3rem; color: var(--navy-deep); }
+.subtitle { font-family: 'Crimson Pro', serif; color: var(--gold-mid); letter-spacing: 0.2em; }
 
 /* ── Unit Grid ── */
 .unit-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 1.5rem;
-  padding: 0 2rem 4rem;
 }
 .unit-card {
-  background: var(--paper-white);
-  border: 1px solid rgba(200,150,10,0.2);
-  border-radius: 16px;
-  padding: 2rem 1.5rem;
-  cursor: pointer;
-  transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
   text-align: center;
-  position: relative;
-  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  border-bottom: 4px solid var(--gold);
+  cursor: pointer;
+  transition: transform 0.3s;
 }
-.unit-card:hover {
-  transform: translateY(-8px);
-  box-shadow: var(--shadow-md);
-  border-color: var(--gold);
-}
-.unit-id { font-family: 'Crimson Pro', serif; font-size: 0.9rem; color: var(--gold-mid); font-weight: 600; margin-bottom: 0.5rem; display: block; }
-.unit-title { font-family: 'Noto Serif TC', serif; font-size: 1.25rem; font-weight: 700; color: var(--navy-deep); }
+.unit-card:hover { transform: translateY(-5px); }
+.unit-title { color: var(--navy-deep); margin-top: 0.5rem; }
 
 /* ── Quiz Area ── */
-.quiz-shell {
-  display: none; /* 初期隱藏 */
-  padding: 0 2rem 4rem;
-  max-width: 800px;
-  margin: 0 auto;
-}
-.quiz-card {
-  background: var(--paper-white);
-  border-radius: 24px;
-  box-shadow: var(--shadow-md);
-  padding: 3rem;
-  position: relative;
-}
-.q-body { font-size: 1.3rem; margin-bottom: 2.5rem; font-weight: 500; }
-.answer-zone { margin-bottom: 2rem; }
-.input-group { position: relative; max-width: 300px; }
-input[type=\"text\"] {
-  width: 100%;
-  padding: 1rem 1.2rem;
-  font-size: 1.2rem;
-  border: 2px solid var(--navy-light);
-  border-radius: 12px;
-  outline: none;
-  transition: border-color 0.3s;
-}
-input[type=\"text\"]:focus { border-color: var(--gold); }
-
-.primary-btn {
-  background: var(--navy-deep);
-  color: white;
-  border: none;
-  padding: 1rem 2.5rem;
-  border-radius: 12px;
-  font-size: 1.1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.3s;
-}
-.primary-btn:hover { background: var(--navy-mid); }
-
-/* ── Toast (B Group Styling) ── */
-.toast-container {
-  position: fixed;
-  bottom: 2rem;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 1000;
-}
-.toast {
-  padding: 1rem 2rem;
-  border-radius: 50px;
-  background: var(--navy-deep);
-  color: white;
-  box-shadow: var(--shadow-md);
-  margin-bottom: 0.5rem;
-  animation: slideUp 0.4s ease-out;
-}
-@keyframes slideUp { from { transform: translateY(100%); opacity:0; } to { transform: translateY(0); opacity:1; } }
-
-/* ── Modals ── */
-.modal-overlay {
-  position: fixed;
-  top:0; left:0; width:100%; height:100%;
-  background: rgba(26,45,90,0.6);
-  backdrop-filter: blur(4px);
-  display: none;
-  justify-content:center; align-items:center; z-index:2000;
-}
-.modal-overlay.open { display: flex; }
-.modal-content {
-  background: var(--paper-white);
-  width: 90%; max-width: 500px;
-  padding: 2.5rem; border-radius: 20px; text-align: center;
-}
+.quiz-shell { background: white; padding: 3rem; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); margin-top: 2rem; }
+input[type="text"] { padding: 0.8rem; width: 200px; border: 2px solid var(--navy-light); border-radius: 8px; font-size: 1.2rem; }
+.primary-btn { background: var(--navy-deep); color: white; border: none; padding: 0.8rem 2rem; border-radius: 8px; cursor: pointer; }
 </style>
 </head>
 <body>
 
-<div class=\"app-container\">
+<div class="app-container">
   <header>
-    <div class=\"logo-area\">
-      <h1>數學王子的覺醒</h1>
-      <div class=\"subtitle\">The Awakening of the Mathematical Prince</div>
-    </div>
+    <h1>數學王子的覺醒</h1>
+    <div class="subtitle">The Awakening of the Mathematical Prince</div>
   </header>
 
-  <section class=\"dashboard\">
-    <div class=\"stat-card\">
-      <div class=\"stat-label\">覺醒積分</div>
-      <div class=\"stat-value\" id=\"user-points\">0</div>
+  <section class="dashboard" style="text-align:center; margin-bottom:2rem;">
+    <div style="background:white; display:inline-block; padding:1rem 2rem; border-radius:10px;">
+      <span style="font-size:0.9rem; color:var(--navy-mid);">覺醒積分</span>
+      <div id="user-points" style="font-size:2rem; font-weight:bold; color:var(--navy-deep);">0</div>
     </div>
   </section>
 
-  <section class=\"unit-grid\" id=\"unit-menu\">
-    <div class=\"unit-card\" data-unit=\"F\">
-      <span class=\"unit-id\">Unit 01</span>
-      <h3 class=\"unit-title\">分數的運算</h3>
-    </div>
-    <div class=\"unit-card\" data-unit=\"P\">
-      <span class=\"unit-id\">Unit 02</span>
-      <h3 class=\"unit-title\">百分率與應用</h3>
-    </div>
-    <div class=\"unit-card\" data-unit=\"S\">
-      <span class=\"unit-id\">Unit 03</span>
-      <h3 class=\"unit-title\">速率與時間</h3>
-    </div>
-    <div class=\"unit-card\" data-unit=\"R\">
-      <span class=\"unit-id\">Unit 04</span>
-      <h3 class=\"unit-title\">比與比例</h3>
-    </div>
-    <div class=\"unit-card\" data-unit=\"C\">
-      <span class=\"unit-id\">Unit 05</span>
-      <h3 class=\"unit-title\">圓與扇形</h3>
-    </div>
-    <div class=\"unit-card\" data-unit=\"A\">
-      <span class=\"unit-id\">Unit 06</span>
-      <h3 class=\"unit-title\">平均數問題</h3>
-    </div>
-    <div class=\"unit-card\" data-unit=\"D\">
-      <span class=\"unit-id\">Unit 07</span>
-      <h3 class=\"unit-title\">圖表判讀</h3>
-    </div>
-    <div class=\"unit-card\" data-unit=\"E\">
-      <span class=\"unit-id\">Unit 08</span>
-      <h3 class=\"unit-title\">一元一次方程</h3>
-    </div>
+  <section class="unit-grid" id="unit-menu">
+    <div class="unit-card" data-unit="F"><div>Unit 01</div><h3 class="unit-title">分數的運算</h3></div>
+    <div class="unit-card" data-unit="P"><div>Unit 02</div><h3 class="unit-title">百分率與應用</h3></div>
+    <div class="unit-card" data-unit="S"><div>Unit 03</div><h3 class="unit-title">速率與時間</h3></div>
+    <div class="unit-card" data-unit="R"><div>Unit 04</div><h3 class="unit-title">比與比例</h3></div>
+    <div class="unit-card" data-unit="C"><div>Unit 05</div><h3 class="unit-title">圓與扇形</h3></div>
+    <div class="unit-card" data-unit="A"><div>Unit 06</div><h3 class="unit-title">平均數問題</h3></div>
+    <div class="unit-card" data-unit="D"><div>Unit 07</div><h3 class="unit-title">圖表判讀</h3></div>
+    <div class="unit-card" data-unit="E"><div>Unit 08</div><h3 class="unit-title">一元一次方程</h3></div>
   </section>
 
-  <main class=\"quiz-shell\" id=\"quiz-shell\" style=\"display:none;\">
-    <div class=\"quiz-card\">
-      <div id=\"question-display\">
-        </div>
-      <div class=\"answer-zone\">
-        <div class=\"input-group\">
-          <input type=\"text\" id=\"answer-input\" placeholder=\"請輸入答案...\">
-        </div>
-        <button class=\"primary-btn\" id=\"submit-btn\" style=\"margin-top: 1.5rem;\">提交作答</button>
-      </div>
-    </div>
-    <button onclick=\"location.reload()\" style=\"margin-top: 2rem; background: none; border: 1px solid var(--gold); color: var(--gold-mid); padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer;\">← 返回單元選單</button>
+  <main class="quiz-shell" id="quiz-shell" style="display:none;">
+    <div id="question-display" style="font-size:1.5rem; margin-bottom:2rem;"></div>
+    <input type="text" id="answer-input" placeholder="請輸入答案...">
+    <button class="primary-btn" id="submit-btn">提交作答</button>
+    <br><br>
+    <button onclick="location.reload()" style="background:none; border:1px solid #ccc; cursor:pointer; padding:5px 10px; border-radius:5px;">← 返回選單</button>
   </main>
 </div>
 
-<div class=\"toast-container\" id=\"toast-container\"></div>
-
-<script src=\"math_prince_core.js\"></script>
-<script src=\"main.js\"></script>
+<script src="math_prince_core.js"></script>
+<script src="main.js"></script>
 
 </body>
 </html>
