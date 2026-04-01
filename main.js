@@ -55,14 +55,12 @@
       state.currentUnit = unitId;
       state.questions = data;
       state.currentIndex = 0;
+      state.currentUnit = unitId;
       document.getElementById('unit-menu').style.display = 'none';
       document.getElementById('quiz-shell').style.display = 'block';
       renderQuestion();
       runtime.isVariantMode = false;
-
-      
       updateDashboard();
-      showToast(`單元 ${unitId} 載入成功`, 'success');
       
     } catch (error) {
       console.error('[MathPrince] Fetch Error:', error);
