@@ -44,7 +44,9 @@
       // 模擬網路延遲或強制失敗測試
       if (options.forceFetchFail) throw new Error('Simulated Network Failure');
 
-      const response = await fetch(`${APP.dataBasePath}unit${unitId.toLowerCase()}.json`);
+    const unitMap = { 'F': 1, 'P': 2, 'S': 3, 'R': 4, 'C': 5, 'A': 6, 'D': 7, 'E': 8 };
+    const unitNum = unitMap[unitId] || 1;
+    const response = await fetch(`DATA/unit${unitNum}.json`);
       if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
       
       const data = await response.json();
