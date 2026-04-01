@@ -108,20 +108,39 @@
     if (loader) loader.style.display = show ? 'flex' : 'none';
   }
 
-  function renderQuestion(targetData = null) {
-    const q = targetData || state.questions[state.currentIndex];
+  function renderQuestion() {
+    const q = state.questions[state.currentIndex];
     const container = document.getElementById('question-display');
-    if (!container || !q) return;
+    const input = document.getElementById('answer-input');
+    const submitBtn = document.getElementById('submit-btn');
 
-    // 依據《技術規範》使用 white-space: pre-wrap 渲染詳解
+    if (!q || !container || !submitBtn) return;
+
+    // 1. 顯示題目內容 (包含題號與題目文字)
     container.innerHTML = `
-      <div class="q-header">
-        <span class="q-tag">#${q.id} ${runtime.isVariantMode ? '(強化練習)' : ''}</span>
-      </div>
-      <div class="q-body">${q.question}</div>
+        <div class="q-header">
+            <span class="q-tag">#${q.id}</span>
+        </div>
+        <div class="q-body">${q.question}</div>
     `;
-    resetAnswerUI();
-  }
+
+    // 2. 清空輸入框並讓游標自動跳進去
+    if (input) {
+        input.value = '';
+        input.focus();
+    }
+
+    // 3. 重點：把按鈕的電線接上 (綁定點擊事件)
+    submitBtn.onclick = () => {
+        const userAns = input.value.trim();
+        if (!userAns) {
+            alert('請先輸入答案喔！');
+            return;
+        }
+        // 呼叫評分系統檢查答案
+        handleAnswer(userAns);
+    };
+}
 
   function resetAnswerUI() {
     const input = document.getElementById('answer-input');
