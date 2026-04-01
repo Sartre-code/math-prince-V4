@@ -45,53 +45,181 @@ body {
   flex-direction: column;
 }
 
-/* ── Header ── */
+/* ══════════════════════════════════════════════════════════
+   HEADER — 覺醒首頁 Header (D 組視覺強化)
+══════════════════════════════════════════════════════════ */
 header {
-  padding: 2.5rem 2rem;
+  background: var(--navy-deep);
+  padding: 2.8rem 2rem 3rem;
   text-align: center;
-  background: linear-gradient(to bottom, var(--paper-white), transparent);
+  position: relative;
+  overflow: hidden;
 }
+
+/* 格線背景 */
+header::before {
+  content: '';
+  position: absolute; inset: 0; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(200,150,10,0.10) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(200,150,10,0.10) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* ── 覺醒王冠動畫 ── */
+.crown-wrap {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 0.7rem;
+}
+.crown-glow {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 64px; height: 64px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(200,150,10,0.6) 0%, transparent 70%);
+  opacity: 0;
+  animation: glowBurst 3.2s ease-out forwards, glowBreath 2.4s ease-in-out 3.2s infinite;
+}
+@keyframes glowBurst {
+  0%,55% { opacity: 0;   transform: translate(-50%,-50%) scale(0.5); }
+  80%    { opacity: 0.9; transform: translate(-50%,-50%) scale(1.7); }
+  100%   { opacity: 0.5; transform: translate(-50%,-50%) scale(1.2); }
+}
+@keyframes glowBreath {
+  0%,100% { opacity: 0.35; transform: translate(-50%,-50%) scale(1.1); }
+  50%     { opacity: 0.65; transform: translate(-50%,-50%) scale(1.45); }
+}
+.crown-icon {
+  font-size: 2.6rem;
+  display: block;
+  position: relative;
+  animation: crownAwaken 3.2s ease-out forwards;
+  filter: grayscale(1) brightness(0.35);
+}
+@keyframes crownAwaken {
+  0%   { filter: grayscale(1) brightness(0.35); }
+  40%  { filter: grayscale(0.6) brightness(0.7); }
+  70%  { filter: grayscale(0) brightness(1.1) drop-shadow(0 0 8px rgba(200,150,10,0.7)); }
+  85%  { filter: grayscale(0) brightness(1.5) drop-shadow(0 0 20px rgba(245,233,192,1)); }
+  100% { filter: grayscale(0) brightness(1.1) drop-shadow(0 0 10px rgba(200,150,10,0.85)); }
+}
+
+/* ── 主標 ── */
 .logo-area h1 {
   font-family: 'Noto Serif TC', serif;
   font-weight: 900;
-  font-size: 2.8rem;
-  color: var(--navy-deep);
-  letter-spacing: 0.1em;
+  font-size: 2.6rem;
+  color: var(--gold-light);
+  letter-spacing: 0.12em;
   margin-bottom: 0.5rem;
+  position: relative;
+  text-shadow: 0 2px 16px rgba(0,0,0,0.35);
 }
+
+/* ── 金線 ── */
+.gold-rule {
+  width: 80px; height: 1.5px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  margin: 0.7rem auto 0.7rem;
+  position: relative;
+}
+
+/* ── 副標（品牌英文）── */
 .subtitle {
-  font-family: 'Crimson Pro', serif;
+  font-family: 'Crimson Pro', Georgia, serif;
   font-style: italic;
-  font-size: 1.1rem;
-  color: var(--gold-mid);
-  text-transform: uppercase;
-  letter-spacing: 0.2em;
+  font-size: 1rem;
+  color: var(--gold);
+  letter-spacing: 0.22em;
+  position: relative;
+  margin-bottom: 1.4rem;
+}
+
+/* ── 英文氛圍裝飾字（D 組新增）── */
+.en-deco {
+  font-family: 'Crimson Pro', Georgia, serif;
+  font-style: italic;
+  font-size: 0.78rem;
+  color: rgba(230, 220, 180, 0.50);
+  letter-spacing: 0.04em;
+  line-height: 1.9;
+  max-width: 480px;
+  margin: 0 auto 1.2rem;
+  position: relative;
+}
+
+/* ── 分隔線 ── */
+.header-divider {
+  display: flex; align-items: center; gap: 0.8rem;
+  max-width: 300px; margin: 0 auto 1rem;
+  position: relative;
+}
+.divider-line {
+  flex: 1; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(200,150,10,0.5));
+}
+.divider-line.r {
+  background: linear-gradient(90deg, rgba(200,150,10,0.5), transparent);
+}
+.divider-diamond {
+  width: 6px; height: 6px;
+  background: var(--gold);
+  transform: rotate(45deg); flex-shrink: 0;
+}
+
+/* ── 中文覺醒宣言（D 組新增）── */
+.declaration {
+  font-family: 'Noto Serif TC', serif;
+  font-size: 0.85rem;
+  color: rgba(240, 233, 200, 0.75);
+  line-height: 2.1;
+  letter-spacing: 0.07em;
+  max-width: 420px;
+  margin: 0 auto;
+  position: relative;
 }
 
 /* ── Dashboard ── */
 .dashboard {
   display: flex;
   justify-content: center;
-  gap: 2rem;
+  gap: 1.2rem;
   margin-bottom: 2.5rem;
+  padding: 0 1.5rem;
+  margin-top: -1.1rem;
+  position: relative; z-index: 1;
+  flex-wrap: wrap;
 }
 .stat-card {
   background: var(--paper-white);
-  padding: 1rem 2rem;
+  padding: 0.9rem 1.8rem;
   border-radius: 12px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
   border-bottom: 3px solid var(--gold);
   text-align: center;
+  min-width: 110px;
 }
-.stat-label { font-size: 0.85rem; color: var(--navy-mid); font-weight: 600; margin-bottom: 0.2rem; }
+.stat-label { font-size: 0.78rem; color: var(--navy-mid); font-weight: 600; margin-bottom: 0.15rem; }
 .stat-value { font-size: 1.8rem; font-weight: 700; color: var(--navy-deep); font-family: 'Crimson Pro', serif; }
+
+/* ── 單元選單標語 ── */
+.unit-section-label {
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--navy-mid);
+  letter-spacing: 0.22em;
+  margin-bottom: 1.2rem;
+}
 
 /* ── Unit Grid ── */
 .unit-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 1.5rem;
-  padding: 0 2rem 4rem;
+  padding: 0 2rem 2rem;
 }
 .unit-card {
   background: var(--paper-white);
@@ -104,20 +232,73 @@ header {
   position: relative;
   overflow: hidden;
 }
+.unit-card::after {
+  content: '';
+  position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, var(--gold), var(--gold-light), var(--gold));
+  transform: scaleX(0);
+  transition: transform 0.3s ease;
+}
 .unit-card:hover {
   transform: translateY(-8px);
   box-shadow: var(--shadow-md);
   border-color: var(--gold);
 }
+.unit-card:hover::after { transform: scaleX(1); }
 .unit-id { font-family: 'Crimson Pro', serif; font-size: 0.9rem; color: var(--gold-mid); font-weight: 600; margin-bottom: 0.5rem; display: block; }
-.unit-title { font-family: 'Noto Serif TC', serif; font-size: 1.25rem; font-weight: 700; color: var(--navy-deep); }
+.unit-title { font-family: 'Noto Serif TC', serif; font-size: 1.2rem; font-weight: 700; color: var(--navy-deep); }
+
+/* ── CTA 橫幅 ── */
+.cta-banner {
+  margin: 0.5rem 2rem 2rem;
+  background: var(--navy-deep);
+  border-radius: 16px;
+  padding: 1.5rem 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.cta-banner h3 {
+  font-family: 'Noto Serif TC', serif;
+  color: var(--gold-light);
+  font-size: 1rem;
+  margin-bottom: 0.2rem;
+}
+.cta-banner p { font-size: 0.8rem; color: rgba(230,236,247,0.7); margin: 0; }
+.cta-btn {
+  background: var(--gold);
+  color: var(--navy-deep);
+  border: none;
+  padding: 0.75rem 1.8rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: 'Noto Sans TC', sans-serif;
+  transition: background 0.2s;
+}
+.cta-btn:hover { background: var(--gold-light); }
+
+/* ── 家長說明 ── */
+.parent-note {
+  text-align: center;
+  padding: 0 2rem 3rem;
+  font-size: 0.78rem;
+  color: #999;
+  line-height: 1.8;
+}
+.parent-note strong { color: var(--navy-mid); }
 
 /* ── Quiz Area ── */
 .quiz-shell {
-  display: none; /* 初期隱藏 */
+  display: none;
   padding: 0 2rem 4rem;
   max-width: 800px;
   margin: 0 auto;
+  width: 100%;
 }
 .quiz-card {
   background: var(--paper-white);
@@ -129,7 +310,7 @@ header {
 .q-body { font-size: 1.3rem; margin-bottom: 2.5rem; font-weight: 500; }
 .answer-zone { margin-bottom: 2rem; }
 .input-group { position: relative; max-width: 300px; }
-input[type=\"text\"] {
+input[type="text"] {
   width: 100%;
   padding: 1rem 1.2rem;
   font-size: 1.2rem;
@@ -137,8 +318,9 @@ input[type=\"text\"] {
   border-radius: 12px;
   outline: none;
   transition: border-color 0.3s;
+  font-family: 'Noto Sans TC', sans-serif;
 }
-input[type=\"text\"]:focus { border-color: var(--gold); }
+input[type="text"]:focus { border-color: var(--gold); }
 
 .primary-btn {
   background: var(--navy-deep);
@@ -150,10 +332,11 @@ input[type=\"text\"]:focus { border-color: var(--gold); }
   font-weight: 600;
   cursor: pointer;
   transition: background 0.3s;
+  font-family: 'Noto Sans TC', sans-serif;
 }
 .primary-btn:hover { background: var(--navy-mid); }
 
-/* ── Toast (B Group Styling) ── */
+/* ── Toast ── */
 .toast-container {
   position: fixed;
   bottom: 2rem;
@@ -170,16 +353,19 @@ input[type=\"text\"]:focus { border-color: var(--gold); }
   margin-bottom: 0.5rem;
   animation: slideUp 0.4s ease-out;
 }
-@keyframes slideUp { from { transform: translateY(100%); opacity:0; } to { transform: translateY(0); opacity:1; } }
+@keyframes slideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
 
 /* ── Modals ── */
 .modal-overlay {
   position: fixed;
-  top:0; left:0; width:100%; height:100%;
+  top: 0; left: 0; width: 100%; height: 100%;
   background: rgba(26,45,90,0.6);
   backdrop-filter: blur(4px);
   display: none;
-  justify-content:center; align-items:center; z-index:2000;
+  justify-content: center; align-items: center; z-index: 2000;
 }
 .modal-overlay.open { display: flex; }
 .modal-content {
@@ -191,75 +377,126 @@ input[type=\"text\"]:focus { border-color: var(--gold); }
 </head>
 <body>
 
-<div class=\"app-container\">
+<div class="app-container">
+
+  <!-- ══ Header：覺醒視覺區 ══ -->
   <header>
-    <div class=\"logo-area\">
-      <h1>數學王子的覺醒</h1>
-      <div class=\"subtitle\">The Awakening of the Mathematical Prince</div>
+    <!-- 覺醒王冠 -->
+    <div class="crown-wrap">
+      <div class="crown-glow"></div>
+      <span class="crown-icon">♛</span>
     </div>
+
+    <div class="logo-area">
+      <h1>數學王子的覺醒</h1>
+    </div>
+
+    <div class="gold-rule"></div>
+    <div class="subtitle">The Awakening of the Mathematical Prince</div>
+
+    <!-- 英文氛圍裝飾字 -->
+    <p class="en-deco">
+      Every child holds the potential to become a Mathematical Prince.<br>
+      Through reasoning, curiosity, and practice, the awakening begins.
+    </p>
+
+    <!-- 分隔線 -->
+    <div class="header-divider">
+      <div class="divider-line"></div>
+      <div class="divider-diamond"></div>
+      <div class="divider-line r"></div>
+    </div>
+
+    <!-- 中文覺醒宣言 -->
+    <p class="declaration">
+      每個孩子都擁有成為數學王子的潛力。<br>
+      透過思考、探索與練習，數學能力將逐漸覺醒。
+    </p>
   </header>
 
-  <section class=\"dashboard\">
-    <div class=\"stat-card\">
-      <div class=\"stat-label\">覺醒積分</div>
-      <div class=\"stat-value\" id=\"user-points\">0</div>
+  <!-- ══ 統計卡 ══ -->
+  <section class="dashboard">
+    <div class="stat-card">
+      <div class="stat-label">覺醒積分</div>
+      <div class="stat-value" id="user-points">0</div>
     </div>
   </section>
 
-  <section class=\"unit-grid\" id=\"unit-menu\">
-    <div class=\"unit-card\" data-unit=\"F\">
-      <span class=\"unit-id\">Unit 01</span>
-      <h3 class=\"unit-title\">分數的運算</h3>
+  <!-- ══ 單元選單 ══ -->
+  <p class="unit-section-label">— 選擇你的修煉單元 —</p>
+
+  <section class="unit-grid" id="unit-menu">
+    <div class="unit-card" data-unit="F">
+      <span class="unit-id">Unit 01</span>
+      <h3 class="unit-title">分數的運算</h3>
     </div>
-    <div class=\"unit-card\" data-unit=\"P\">
-      <span class=\"unit-id\">Unit 02</span>
-      <h3 class=\"unit-title\">百分率與應用</h3>
+    <div class="unit-card" data-unit="P">
+      <span class="unit-id">Unit 02</span>
+      <h3 class="unit-title">百分率與應用</h3>
     </div>
-    <div class=\"unit-card\" data-unit=\"S\">
-      <span class=\"unit-id\">Unit 03</span>
-      <h3 class=\"unit-title\">速率與時間</h3>
+    <div class="unit-card" data-unit="S">
+      <span class="unit-id">Unit 03</span>
+      <h3 class="unit-title">速率與時間</h3>
     </div>
-    <div class=\"unit-card\" data-unit=\"R\">
-      <span class=\"unit-id\">Unit 04</span>
-      <h3 class=\"unit-title\">比與比例</h3>
+    <div class="unit-card" data-unit="R">
+      <span class="unit-id">Unit 04</span>
+      <h3 class="unit-title">比與比例</h3>
     </div>
-    <div class=\"unit-card\" data-unit=\"C\">
-      <span class=\"unit-id\">Unit 05</span>
-      <h3 class=\"unit-title\">圓與扇形</h3>
+    <div class="unit-card" data-unit="C">
+      <span class="unit-id">Unit 05</span>
+      <h3 class="unit-title">圓與扇形</h3>
     </div>
-    <div class=\"unit-card\" data-unit=\"A\">
-      <span class=\"unit-id\">Unit 06</span>
-      <h3 class=\"unit-title\">平均數問題</h3>
+    <div class="unit-card" data-unit="A">
+      <span class="unit-id">Unit 06</span>
+      <h3 class="unit-title">平均數問題</h3>
     </div>
-    <div class=\"unit-card\" data-unit=\"D\">
-      <span class=\"unit-id\">Unit 07</span>
-      <h3 class=\"unit-title\">圖表判讀</h3>
+    <div class="unit-card" data-unit="D">
+      <span class="unit-id">Unit 07</span>
+      <h3 class="unit-title">圖表判讀</h3>
     </div>
-    <div class=\"unit-card\" data-unit=\"E\">
-      <span class=\"unit-id\">Unit 08</span>
-      <h3 class=\"unit-title\">一元一次方程</h3>
+    <div class="unit-card" data-unit="E">
+      <span class="unit-id">Unit 08</span>
+      <h3 class="unit-title">一元一次方程</h3>
     </div>
   </section>
 
-  <main class=\"quiz-shell\" id=\"quiz-shell\" style=\"display:none;\">
-    <div class=\"quiz-card\">
-      <div id=\"question-display\">
+  <!-- ══ CTA 橫幅 ══ -->
+  <div class="cta-banner">
+    <div>
+      <h3>🏆 每答對一題，獲得 10 覺醒積分</h3>
+      <p>支援變體題練習・完整解題詳解・進度自動儲存</p>
+    </div>
+    <button class="cta-btn" onclick="document.getElementById('unit-menu').scrollIntoView({behavior:'smooth'})">
+      開始覺醒 →
+    </button>
+  </div>
+
+  <!-- ══ 家長說明 ══ -->
+  <p class="parent-note">
+    <strong>給家長：</strong>涵蓋國小六年級升國中核心數學概念，每單元附完整詳解，<br>
+    支援進度備份與跨裝置恢復，隨時掌握孩子學習狀況。
+  </p>
+
+  <!-- ══ 答題區（由 main.js 控制顯示）══ -->
+  <main class="quiz-shell" id="quiz-shell" style="display:none;">
+    <div class="quiz-card">
+      <div id="question-display"></div>
+      <div class="answer-zone">
+        <div class="input-group">
+          <input type="text" id="answer-input" placeholder="請輸入答案...">
         </div>
-      <div class=\"answer-zone\">
-        <div class=\"input-group\">
-          <input type=\"text\" id=\"answer-input\" placeholder=\"請輸入答案...\">
-        </div>
-        <button class=\"primary-btn\" id=\"submit-btn\" style=\"margin-top: 1.5rem;\">提交作答</button>
+        <button class="primary-btn" id="submit-btn" style="margin-top: 1.5rem;">提交作答</button>
       </div>
     </div>
-    <button onclick=\"location.reload()\" style=\"margin-top: 2rem; background: none; border: 1px solid var(--gold); color: var(--gold-mid); padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer;\">← 返回單元選單</button>
+    <button onclick="location.reload()" style="margin-top: 2rem; background: none; border: 1px solid var(--gold); color: var(--gold-mid); padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; font-family: 'Noto Sans TC', sans-serif;">← 返回單元選單</button>
   </main>
-</div>
 
-<div class=\"toast-container\" id=\"toast-container\"></div>
+</div><!-- /.app-container -->
 
-<script src=\"math_prince_core.js\"></script>
-<script src=\"main.js\"></script>
+<div class="toast-container" id="toast-container"></div>
+
+<script src="math_prince_core.js"></script>
+<script src="main.js"></script>
 
 </body>
 </html>
