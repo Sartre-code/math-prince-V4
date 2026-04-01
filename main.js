@@ -141,7 +141,51 @@
         handleAnswer(userAns);
     };
 }
+// 這是我們剛剛發現漏掉的「檢查答案」功能大腦
+function handleAnswer(userAns) {
+    try {
+        const q = state.questions[state.currentIndex];
+        
+        // 如果找不到題目資料，就停止執行
+        if (!q) {
+            console.error("找不到題目資料");
+            return;
+        }
 
+        // 呼叫 SmartGrader 進行閱卷 (確認你的 core.js 裡有這個名稱)
+        const result = SmartGrader.grade(userAns, q);
+
+        if (result.isCorrect) {
+            // 答對了：加分、更新介面、顯示成功訊息
+            state.score += 10;
+            updateDashboard();
+            showToast('正確！積分 +10', 'success');
+            
+            // 1秒後自動跳下一題
+            setTimeout(() => {
+                state.currentIndex++;
+                if (state.currentIndex < state.questions.length) {
+                    renderQuestion();
+                } else {
+                    showToast('恭喜完成本單元！', 'success');
+                    // 這裡可以選擇回到主選單
+                    setTimeout(() => location.reload(), 2000);
+                }
+            }, 1000);
+            
+        } else {
+            // 答錯了：顯示錯誤回饋
+            showToast(result.feedback || '再想一下喔！', 'error');
+        }
+
+    } catch (error) {
+        console.error("評分過程出錯:", error);
+        showToast('系統思考中，請稍後再試', 'error');
+    }
+}
+
+
+  
   function resetAnswerUI() {
     const input = document.getElementById('answer-input');
     if (input) {
