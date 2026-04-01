@@ -1,12 +1,10 @@
 /**
  * ╔══════════════════════════════════════════════════════════════════════╗
- * ║  數學王子的覺醒 — main.js  (D 組系統整合交付)                       ║
- * ║  依據《技術規範手冊 V4.0》+ 《技術交接與錯誤彙整報告 V4.1》         ║
- * ╠══════════════════════════════════════════════════════════════════════╣
- * ║  · 嚴格對齊 index.html 所有 ID（以 HTML 為準）                      ║
- * ║  · openUnit 掛載至 window（§V4.1 全域作用域修正）                   ║
- * ║  · 補充注入 StorageGuard 所需 Modal DOM（HTML 未提供）               ║
- * ║  · 事件統一由 JS 管理，不依賴 HTML inline onclick                    ║
+ * ║  數學王子的覺醒 — main.js  (D 組 V4.2 修正版)                       ║
+ * ║  修正項目：                                                          ║
+ * ║  · §14.5.1/14.5.3 答錯3次觸發中斷機制（查看答案 / 跳過此題）        ║
+ * ║  · §14.9.2 複合答案正規化（「9段、0公尺」等同「9段，剩下0公尺」）   ║
+ * ║  · 進度持久化：回首頁再進入同單元，從上次題號繼續                   ║
  * ╚══════════════════════════════════════════════════════════════════════╝
  */
 
@@ -14,8 +12,6 @@
 
 /* ════════════════════════════════════════════════════════════════
    §0  單元映射表
-   data-unit 屬性值  →  DATA/ 資料夾 JSON 路徑
-   （GitHub 已確認資料夾名稱為大寫 DATA）
 ════════════════════════════════════════════════════════════════ */
 const UNIT_MAP = {
   F: { file: 'DATA/unit1.json', name: '分數的運算',   unitNum: 1 },
@@ -29,24 +25,24 @@ const UNIT_MAP = {
 };
 
 /* ════════════════════════════════════════════════════════════════
-   §1  應用狀態（單一真實來源）
+   §1  應用狀態
 ════════════════════════════════════════════════════════════════ */
 const state = {
-  points:        0,     // 累積覺醒積分
-  currentUnit:   null,  // 目前開啟的單元碼（'F' | 'P' | ...）
-  questions:     [],    // 從 JSON 載入的題目陣列
-  currentIndex:  0,     // 目前題目索引
-  isVariantMode: false, // false = 主題，true = 同題之 variant 版本
-  answered:      false, // 本題是否已完成判定（防止重複計分）
+  points:        0,
+  currentUnit:   null,
+  questions:     [],
+  currentIndex:  0,
+  isVariantMode: false,
+  answered:      false,
+  wrongCount:    0,     // §14.5.1 本題連續答錯次數
 };
 
-/**
- * 取得目前應顯示的題目物件。
- *
- * 設計說明：「重新練習」按鈕只切換 isVariantMode flag，
- * 仍指向同一 questions[currentIndex]，僅選擇主體或 variant 子物件。
- * 完全不需要重新 fetch，切換為 O(1) 操作。
- */
+/* §14.5.1 連續答錯上限 */
+const WRONG_LIMIT = 3;
+
+/* localStorage 進度 key */
+const PROGRESS_KEY = 'mp_unit_progress';
+
 function getCurrentQuestion() {
   const base = state.questions[state.currentIndex];
   if (!base) return null;
@@ -54,166 +50,124 @@ function getCurrentQuestion() {
 }
 
 /* ════════════════════════════════════════════════════════════════
-   §2  DOM 快取（嚴格對齊 index.html 現有 ID，不自行命名）
+   §2  DOM 快取
 ════════════════════════════════════════════════════════════════ */
 const $id = id => document.getElementById(id);
-
 let DOM = {};
 
 function initDOMCache() {
   DOM = {
-    userPoints:      $id('user-points'),       // 積分顯示 <span>
-    unitMenu:        $id('unit-menu'),          // 單元選單 <section>
-    quizShell:       $id('quiz-shell'),         // 題目殼層 <main>
-    questionDisplay: $id('question-display'),   // 題目渲染容器 <div>
-    answerInput:     $id('answer-input'),       // 答案輸入框 <input>
-    submitBtn:       $id('submit-btn'),         // 提交按鈕 <button>
-    toastContainer:  $id('toast-container'),    // Toast 容器 <div>
+    userPoints:      $id('user-points'),
+    unitMenu:        $id('unit-menu'),
+    quizShell:       $id('quiz-shell'),
+    questionDisplay: $id('question-display'),
+    answerInput:     $id('answer-input'),
+    submitBtn:       $id('submit-btn'),
+    toastContainer:  $id('toast-container'),
   };
 }
 
 /* ════════════════════════════════════════════════════════════════
-   §3  補充注入 StorageGuard 所需的 Modal DOM
-   ─────────────────────────────────────────────────────────────
-   C 組 math_prince_core.js 的 StorageGuard 依賴以下 ID：
-     #backupModal · #codeDisplay · #copyBtn
-     #modalErrorBanner · #privateWarning
-   但 B 組 HTML 原型未提供這些元素。
-   由 D 組在 DOMContentLoaded 時動態注入。
+   §3  StorageGuard Modal 補充注入
 ════════════════════════════════════════════════════════════════ */
 function injectStorageGuardModals() {
-  if ($id('backupModal')) return; // 冪等保護，避免重複注入
+  if ($id('backupModal')) return;
 
-  /* ── 輔助 CSS ─────────────────────────────────────── */
   const styleEl = document.createElement('style');
   styleEl.id = 'mp-d-styles';
   styleEl.textContent = `
-    /* §14.6.2 私密模式 / 儲存失敗警告橫幅 */
     #privateWarning {
-      display: none;
-      position: fixed;
+      display: none; position: fixed;
       top: 0; left: 0; width: 100%;
-      background: var(--error, #8B1A1A);
-      color: #fff;
-      text-align: center;
-      padding: 10px 1rem;
-      font-size: 0.9rem;
-      z-index: 10000;
-      line-height: 1.6;
+      background: var(--error, #8B1A1A); color: #fff;
+      text-align: center; padding: 10px 1rem;
+      font-size: 0.9rem; z-index: 10000; line-height: 1.6;
     }
     #privateWarning.show { display: block !important; }
-
-    /* §14.6.3 備份碼 Modal 內的錯誤橫幅 */
     #modalErrorBanner {
-      display: none;
-      background: var(--error, #8B1A1A);
-      color: #fff;
-      border-radius: 6px;
-      padding: 0.6rem 1rem;
-      font-size: 0.85rem;
-      margin-bottom: 1rem;
-      text-align: center;
+      display: none; background: var(--error, #8B1A1A); color: #fff;
+      border-radius: 6px; padding: 0.6rem 1rem;
+      font-size: 0.85rem; margin-bottom: 1rem; text-align: center;
     }
     #modalErrorBanner.show { display: block !important; }
-
-    /* 備份碼顯示框 */
     #codeDisplay {
-      background: var(--navy-light, #E6ECF7);
-      border-radius: 8px;
-      padding: 1rem;
-      font-size: 0.72rem;
-      word-break: break-all;
-      max-height: 130px;
-      overflow-y: auto;
-      font-family: 'Courier New', monospace;
-      margin-bottom: 1.5rem;
-      outline: none;
-      user-select: text;
-      cursor: text;
-      line-height: 1.7;
+      background: var(--navy-light, #E6ECF7); border-radius: 8px;
+      padding: 1rem; font-size: 0.72rem; word-break: break-all;
+      max-height: 130px; overflow-y: auto;
+      font-family: 'Courier New', monospace; margin-bottom: 1.5rem;
+      outline: none; user-select: text; cursor: text; line-height: 1.7;
     }
     .copy-btn.success    { background: var(--success, #2D6A4F) !important; }
     .copy-btn.error-state { background: var(--error, #8B1A1A) !important; }
 
-    /* ── 題目區淡入動畫 ────────────────────────────── */
     @keyframes mp-fade-in {
       from { opacity: 0; transform: translateY(14px); }
-      to   { opacity: 1; transform: translateY(0);    }
+      to   { opacity: 1; transform: translateY(0); }
     }
-    .mp-question-enter {
-      animation: mp-fade-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
-    }
+    .mp-question-enter { animation: mp-fade-in 0.35s cubic-bezier(0.22,1,0.36,1) both; }
 
-    /* ── 載入旋轉器 ─────────────────────────────────── */
     @keyframes mp-spin {
       from { transform: rotate(0deg); }
       to   { transform: rotate(360deg); }
     }
-    .mp-spinner {
-      display: inline-block;
-      animation: mp-spin 0.9s linear infinite;
-      font-size: 2rem;
-    }
+    .mp-spinner { display: inline-block; animation: mp-spin 0.9s linear infinite; font-size: 2rem; }
 
-    /* ── 單元卡片載入中 ──────────────────────────────── */
-    .unit-card.mp-loading {
-      opacity: 0.55;
-      pointer-events: none;
-    }
+    .unit-card.mp-loading { opacity: 0.55; pointer-events: none; }
 
-    /* ── 詳解折疊展開 ────────────────────────────────── */
     .mp-explanation {
-      overflow: hidden;
-      max-height: 0;
-      opacity: 0;
+      overflow: hidden; max-height: 0; opacity: 0;
       transition: max-height 0.45s ease, opacity 0.3s ease, padding 0.3s ease;
       padding: 0 1.5rem;
     }
-    .mp-explanation.open {
-      max-height: 3000px;
-      opacity: 1;
-      padding: 1.2rem 1.5rem;
-    }
+    .mp-explanation.open { max-height: 3000px; opacity: 1; padding: 1.2rem 1.5rem; }
 
-    /* ── Unit 7 資料描述區塊 ─────────────────────────── */
     .mp-data-block {
-      display: block;
-      background: var(--chalk, #F0EDE6);
+      display: block; background: var(--chalk, #F0EDE6);
       border-left: 4px solid var(--gold, #C8960A);
       border-radius: 0 10px 10px 0;
-      padding: 0.7rem 1.1rem;
-      margin: 0.7rem 0;
-      font-weight: 600;
-      font-size: 0.95rem;
-      line-height: 1.9;
+      padding: 0.7rem 1.1rem; margin: 0.7rem 0;
+      font-weight: 600; font-size: 0.95rem; line-height: 1.9;
     }
 
-    /* ── 答對 / 答錯回饋動畫 ──────────────────────────── */
     @keyframes mp-pulse-green {
       0%   { box-shadow: 0 0 0 0 rgba(45,106,79,0.55); }
       70%  { box-shadow: 0 0 0 14px rgba(45,106,79,0); }
-      100% { box-shadow: 0 0 0 0 rgba(45,106,79,0);    }
+      100% { box-shadow: 0 0 0 0 rgba(45,106,79,0); }
     }
     @keyframes mp-shake {
       0%,100% { transform: translateX(0); }
       20%     { transform: translateX(-7px); }
-      40%     { transform: translateX(7px);  }
+      40%     { transform: translateX(7px); }
       60%     { transform: translateX(-4px); }
-      80%     { transform: translateX(4px);  }
+      80%     { transform: translateX(4px); }
     }
     .mp-shake   { animation: mp-shake 0.4s ease; }
     .mp-correct { animation: mp-pulse-green 0.65s ease; }
+
+    /* §14.5.3 挫折感防禦：中斷提示區塊 */
+    .mp-frustration-zone {
+      background: #FFF8E7;
+      border: 1.5px solid var(--gold, #C8960A);
+      border-radius: 12px;
+      padding: 1.2rem 1.5rem;
+      margin-top: 1.2rem;
+      text-align: center;
+    }
+    .mp-frustration-zone p {
+      font-size: 0.9rem; color: var(--navy-mid, #2A4A8A);
+      margin-bottom: 1rem; line-height: 1.7;
+    }
+    .mp-frustration-zone .btn-row {
+      display: flex; gap: 0.8rem; justify-content: center; flex-wrap: wrap;
+    }
   `;
   document.head.appendChild(styleEl);
 
-  /* ── #privateWarning 橫幅 ────────────────────────── */
   const warning = document.createElement('div');
   warning.id = 'privateWarning';
-  warning.textContent =
-    '⚠ 偵測到儲存空間限制，進度已暫存於記憶體。請複製備份碼以保存您的進度。';
+  warning.textContent = '⚠ 偵測到儲存空間限制，進度已暫存於記憶體。請複製備份碼以保存您的進度。';
   document.body.appendChild(warning);
 
-  /* ── #backupModal ────────────────────────────────── */
   const modal = document.createElement('div');
   modal.id = 'backupModal';
   modal.className = 'modal-overlay';
@@ -223,39 +177,16 @@ function injectStorageGuardModals() {
   modal.setAttribute('aria-hidden', 'true');
   modal.innerHTML = `
     <div class="modal-content" style="max-width:520px;">
-      <h2 style="
-        font-family:'Noto Serif TC',serif;
-        color:var(--navy-deep);
-        font-size:1.5rem;
-        margin-bottom:0.5rem;
-      ">📋 進度備份碼</h2>
+      <h2 style="font-family:'Noto Serif TC',serif;color:var(--navy-deep);font-size:1.5rem;margin-bottom:0.5rem;">📋 進度備份碼</h2>
       <p style="font-size:0.88rem;color:#666;margin-bottom:1.2rem;line-height:1.65;">
         無法自動儲存進度。請複製以下備份碼，下次可貼入以恢復進度。
       </p>
       <div id="codeDisplay" tabindex="0"></div>
-      <div id="modalErrorBanner">
-        複製失敗，請手動框選文字後按 Ctrl+C（Mac：⌘C）。
-      </div>
+      <div id="modalErrorBanner">複製失敗，請手動框選文字後按 Ctrl+C（Mac：⌘C）。</div>
       <div style="display:flex;gap:0.8rem;justify-content:center;flex-wrap:wrap;">
-        <button
-          id="copyBtn"
-          class="primary-btn copy-btn"
-          onclick="copyCode()"
-          style="min-width:160px;min-height:44px;"
-        >一鍵複製進度碼</button>
-        <button
-          class="primary-btn"
-          onclick="
-            document.getElementById('backupModal').classList.remove('open');
-            document.getElementById('backupModal').setAttribute('aria-hidden','true');
-          "
-          style="
-            background:transparent;
-            border:2px solid var(--navy-deep);
-            color:var(--navy-deep);
-            min-height:44px;
-          "
-        >關閉</button>
+        <button id="copyBtn" class="primary-btn copy-btn" onclick="copyCode()" style="min-width:160px;min-height:44px;">一鍵複製進度碼</button>
+        <button class="primary-btn" onclick="document.getElementById('backupModal').classList.remove('open');document.getElementById('backupModal').setAttribute('aria-hidden','true');"
+          style="background:transparent;border:2px solid var(--navy-deep);color:var(--navy-deep);min-height:44px;">關閉</button>
       </div>
     </div>
   `;
@@ -265,34 +196,14 @@ function injectStorageGuardModals() {
 /* ════════════════════════════════════════════════════════════════
    §4  UI 工具函式
 ════════════════════════════════════════════════════════════════ */
-
-/** 同步更新畫面上的積分顯示 */
 function updatePoints() {
   if (DOM.userPoints) DOM.userPoints.textContent = state.points;
 }
 
-/** Toast 捷徑（統一透過 InputGuard 的 Toast 系統） */
 function showToast(msg, type = 'default', dur = 3000) {
   window.MathPrince.InputGuard.showToast(msg, type, dur);
 }
 
-/**
- * esc(str) — 統一 XSS 防護函式（§HTML 注入安全性修正）
- *
- * 設計說明：
- *   凡是將外部來源字串（JSON 題庫、unitCode、動態欄位）
- *   插入 innerHTML 模板字串前，必須通過此函式跳脫。
- *   涵蓋六個 HTML 危險字元：& < > " ' `
- *
- *   使用規則：
- *     ✅ 必要：q.question / q.explanation / q.answer / unitCode 等外部字串
- *     ✅ 必要：任何經 state 讀取後轉字串插入模板的欄位
- *     ⛔ 不需要：純 Number 型別（state.points / state.currentIndex 等）
- *     ⛔ 不需要：系統內部硬編碼常數（UNIT_MAP.name 等）
- *
- * @param {*} value - 任意值，強制轉型為字串後跳脫
- * @returns {string} 安全的 HTML 文字節點等效字串
- */
 function esc(value) {
   return String(value ?? '')
     .replace(/&/g,  '&amp;')
@@ -303,58 +214,149 @@ function esc(value) {
     .replace(/`/g,  '&#96;');
 }
 
-/**
- * 顯示 / 隱藏答案輸入區（.answer-zone）。
- *
- * 設計說明：這是解決 InputGuard unlockUI 競態問題的核心策略。
- * InputGuard 的 finally 區塊會在 onValidSubmit 返回後重新啟用按鈕，
- * 若我們只靠 disabled 屬性來阻擋，會被 unlockUI 覆寫（V4.1 §冗餘邏輯衝突）。
- * 解法：答對後直接隱藏整個 .answer-zone，
- * InputGuard 的解鎖操作對隱藏元素不產生視覺影響。
- */
 function setAnswerZoneVisible(visible) {
-  // answer-zone 是 #answer-input 的祖先 <div class="answer-zone">
   const zone = DOM.answerInput?.closest('.answer-zone');
   if (zone) zone.style.display = visible ? '' : 'none';
 }
 
 /* ════════════════════════════════════════════════════════════════
-   §5  Unit 7 統計單元：資料描述區塊化排版
+   §4.5  進度持久化（修正三：回首頁不歸零）
+   ─────────────────────────────────────────────────────────────
+   儲存結構：{ [unitCode]: { index, points } }
+   · 每次答對或跳過後更新
+   · 進入單元時若有紀錄，從上次題號繼續
+   · 單元完成後清除該單元進度（避免無限重做）
 ════════════════════════════════════════════════════════════════ */
+function saveUnitProgress() {
+  try {
+    const raw  = localStorage.getItem(PROGRESS_KEY);
+    const data = raw ? JSON.parse(raw) : {};
+    data[state.currentUnit] = {
+      index:  state.currentIndex,
+      points: state.points,
+    };
+    localStorage.setItem(PROGRESS_KEY, JSON.stringify(data));
+  } catch (_) {}
+}
 
-/**
- * 將題目文字轉換為安全 HTML 字串。
- *
- * Unit 7（圖表判讀）：題目內含「OOO：數字 單位、數字 單位…」
- * 格式的資料表描述，以 .mp-data-block 區塊加粗排版。
- * 其他單元：僅做 XSS 跳脫，保留 \n 換行（由 white-space:pre-wrap 渲染）。
- *
- * @param {string} question - 原始題目文字
- * @param {string} unitCode - 單元代碼
- * @returns {string} 安全的 HTML 字串
- */
-function buildQuestionHTML(question, unitCode) {
-  // 統一透過 esc() 執行六字元 XSS 跳脫（§HTML 注入安全性修正）
-  // esc() 已涵蓋 & < > " ' ` 六個危險字元，無需重複實作
-  const escaped = esc(question);
+function loadUnitProgress(unitCode) {
+  try {
+    const raw  = localStorage.getItem(PROGRESS_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    return data[unitCode] ?? null;
+  } catch (_) { return null; }
+}
 
-  if (unitCode !== 'D') {
-    return escaped; // 非統計單元，直接回傳
-  }
-
-  // Unit 7：匹配「包含冒號 + 多個數字 + 分隔符」的資料列句子
-  // 例："六年一班 18 棵、六年二班 25 棵、六年三班 21 棵、六年四班 30 棵、六年五班 16 棵"
-  const DATA_PATTERN =
-    /([^。\n]*[:：][^。\n]*\d+[^。\n]*[、，,][^。\n]*\d+[^。\n]*(?:。)?)/g;
-
-  return escaped.replace(
-    DATA_PATTERN,
-    match => `<span class="mp-data-block">${match}</span>`
-  );
+function clearUnitProgress(unitCode) {
+  try {
+    const raw  = localStorage.getItem(PROGRESS_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    delete data[unitCode];
+    localStorage.setItem(PROGRESS_KEY, JSON.stringify(data));
+  } catch (_) {}
 }
 
 /* ════════════════════════════════════════════════════════════════
-   §6  題目渲染（核心 UI 組裝函式）
+   §4.55  各單元答題統計（支援覺醒評鑑）
+   ─────────────────────────────────────────────────────────────
+   結構：{ [unitCode]: { attempted, correct, skipped } }
+   · attempted：提交答案的次數（含對與錯）
+   · correct  ：答對題數
+   · skipped  ：跳過題數（不計分）
+════════════════════════════════════════════════════════════════ */
+function recordStat(unitCode, type) {
+  // type: 'correct' | 'wrong' | 'skipped'
+  try {
+    const raw   = localStorage.getItem(STATS_KEY);
+    const data  = raw ? JSON.parse(raw) : {};
+    if (!data[unitCode]) data[unitCode] = { attempted: 0, correct: 0, skipped: 0 };
+    if (type === 'correct') { data[unitCode].attempted++; data[unitCode].correct++; }
+    else if (type === 'wrong')   { data[unitCode].attempted++; }
+    else if (type === 'skipped') { data[unitCode].skipped++;   }
+    localStorage.setItem(STATS_KEY, JSON.stringify(data));
+  } catch (_) {}
+}
+
+function loadAllStats() {
+  try {
+    const raw = localStorage.getItem(STATS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (_) { return {}; }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   §4.6  複合答案正規化（§14.9.2 全局擴充）
+   ─────────────────────────────────────────────────────────────
+   適用於全部 8 個單元的所有題目。
+   SmartGrader 處理單一數值很準確，但複合答案（含多個數值
+   或修飾詞）容易因格式不同而誤判。此層在送出前統一清洗。
+
+   覆蓋場景（舉例）：
+   · 「9段、0公尺」  = 「9段，剩下0公尺」（Unit 1 分數）
+   · 「甲店，多6支」 = 「甲店多6支」     （Unit 7 統計）
+   · 「x=12」       = 「12」              （Unit 8 方程）
+   · 「1又1/2公尺」 = 「1.5公尺」        （SmartGrader 混合數）
+   · 「8包，0公斤」  = 「8包，剩下0公斤」
+
+   正規化管線（順序不可顛倒）：
+   P1. 全形 → 半形
+   P2. 統一分隔符（頓號、分號、換行 → 逗號）
+   P3. 移除答案修飾前綴詞（「剩下」「共」「約」等）
+   P4. 移除標點符號前後的冗餘空白
+   P5. 移除數字與中文單位之間的空白
+════════════════════════════════════════════════════════════════ */
+function normalizeCompositeAnswer(userInput, correctAnswer) {
+  function pipeline(s) {
+    s = String(s ?? '');
+
+    // P1：全形數字/符號 → 半形
+    s = s.replace(/[\uFF01-\uFF5E]/g, ch =>
+      String.fromCharCode(ch.charCodeAt(0) - 0xFEE0)
+    );
+
+    // P2：統一複合分隔符 → 逗號（頓號、分號、換行、全形逗號）
+    s = s.replace(/[、；\n\r\uff0c]/g, '，');
+
+    // P3：移除答案修飾詞（全局）
+    //   「剩下」「共有」「共」「約」「相差」「合計」「一共」「總共」
+    //   「結果是」「答案是」「等於」「得」「為」（字首單字）
+    s = s.replace(/剩下|共有|共|約|相差|合計|一共|總共|結果是|答案是|等於|得(?=\d)/g, '');
+
+    // P4：逗號前後冗餘空白
+    s = s.replace(/\s*，\s*/g, '，');
+
+    // P5：數字與中文單位之間的空白（「9 段」→「9段」）
+    s = s.replace(/(\d)\s+([\u4E00-\u9FFF])/g, '$1$2');
+    s = s.replace(/([\u4E00-\u9FFF])\s+(\d)/g, '$1$2');
+
+    // P6：移除首尾空白
+    s = s.trim();
+
+    return s;
+  }
+
+  return {
+    userNorm:    pipeline(userInput),
+    correctNorm: pipeline(String(correctAnswer)),
+  };
+}
+
+/* ════════════════════════════════════════════════════════════════
+   §5  Unit 7 資料排版
+════════════════════════════════════════════════════════════════ */
+function buildQuestionHTML(question, unitCode) {
+  const escaped = esc(question);
+  if (unitCode !== 'D') return escaped;
+
+  const DATA_PATTERN =
+    /([^。\n]*[:：][^。\n]*\d+[^。\n]*[、，,][^。\n]*\d+[^。\n]*(?:。)?)/g;
+  return escaped.replace(DATA_PATTERN, match => `<span class="mp-data-block">${match}</span>`);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   §6  題目渲染
 ════════════════════════════════════════════════════════════════ */
 function renderQuestion() {
   const q        = getCurrentQuestion();
@@ -365,237 +367,238 @@ function renderQuestion() {
 
   const hasVariant     = !!(baseQ && baseQ.variant);
   const isLastQuestion = state.currentIndex >= state.questions.length - 1;
+  const hitLimit       = state.wrongCount >= WRONG_LIMIT;
 
-  /* ── 組裝 HTML 字串 ──────────────────────────────── */
   let html = `<div class="mp-question-enter">`;
 
   // 進度列
   html += `
-    <div style="
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-      margin-bottom:1.5rem;
-      padding-bottom:1rem;
-      border-bottom:2px solid var(--navy-light);
-    ">
+    <div style="display:flex;justify-content:space-between;align-items:center;
+      margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:2px solid var(--navy-light);">
       <span style="font-size:0.85rem;color:var(--navy-mid);font-weight:600;">
         第 ${state.currentIndex + 1} / ${state.questions.length} 題
         ${state.isVariantMode
-          ? `<span style="
-              background:var(--gold-light);
-              color:var(--gold-mid);
-              border-radius:4px;
-              padding:2px 8px;
-              margin-left:8px;
-              font-size:0.78rem;
-              font-weight:700;
-              letter-spacing:.03em;
-            ">變體題</span>`
-          : ''
-        }
+          ? `<span style="background:var(--gold-light);color:var(--gold-mid);border-radius:4px;
+              padding:2px 8px;margin-left:8px;font-size:0.78rem;font-weight:700;">變體題</span>`
+          : ''}
       </span>
       <span style="font-size:0.9rem;color:var(--gold-mid);font-weight:600;">
         🏆 ${state.points} 分
       </span>
     </div>`;
 
-  // 題目本文（white-space:pre-wrap 確保 \n 換行正確顯示）
+  // 題目本文
   html += `
-    <div
-      class="q-body"
-      style="white-space:pre-wrap;line-height:1.95;margin-bottom:2rem;"
-    >${buildQuestionHTML(q.question, unitCode)}</div>`;
+    <div class="q-body" style="white-space:pre-wrap;line-height:1.95;margin-bottom:2rem;">
+      ${buildQuestionHTML(q.question, unitCode)}
+    </div>`;
 
-  // 答對後：詳解區 + 操作按鈕
+  // 答對後：詳解 + 按鈕
   if (state.answered) {
     const expHTML = buildQuestionHTML(q.explanation || '', unitCode);
-
     html += `
       <div id="mp-explanation-zone" style="margin-top:0.5rem;">
-        <button
-          id="toggle-explanation-btn"
-          style="
-            background: var(--gold-light);
-            border: 1px solid var(--gold);
-            color: var(--gold-mid);
-            padding: 0.55rem 1.3rem;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-            transition: background 0.2s;
-          "
-        >📖 查看詳解</button>
-
-        <div
-          id="mp-explanation-content"
-          class="mp-explanation"
-          style="
-            background: var(--chalk);
-            border-left: 4px solid var(--gold);
-            border-radius: 0 12px 12px 0;
-            white-space: pre-wrap;
-            line-height: 1.9;
-            font-size: 0.93rem;
-          "
-        >${expHTML}</div>
+        <button id="toggle-explanation-btn" style="
+          background:var(--gold-light);border:1px solid var(--gold);color:var(--gold-mid);
+          padding:0.55rem 1.3rem;border-radius:8px;cursor:pointer;
+          font-size:0.9rem;font-weight:600;margin-bottom:0.5rem;transition:background 0.2s;">
+          📖 查看詳解
+        </button>
+        <div id="mp-explanation-content" class="mp-explanation" style="
+          background:var(--chalk);border-left:4px solid var(--gold);
+          border-radius:0 12px 12px 0;white-space:pre-wrap;line-height:1.9;font-size:0.93rem;">
+          ${expHTML}
+        </div>
       </div>
-
       <div style="display:flex;gap:0.8rem;flex-wrap:wrap;margin-top:1.8rem;">
         ${hasVariant
-          ? `<button
-               id="retry-variant-btn"
-               class="primary-btn"
-               style="background:var(--gold-mid);min-height:44px;"
-             >🔄 ${state.isVariantMode ? '切回原題' : '重新練習（變體）'}</button>`
-          : ''
-        }
-        <button
-          id="next-question-btn"
-          class="primary-btn"
-          style="background:var(--success,#2D6A4F);min-height:44px;"
-        >${isLastQuestion ? '完成單元 🎉' : '下一題 →'}</button>
+          ? `<button id="retry-variant-btn" class="primary-btn"
+               style="background:var(--gold-mid);min-height:44px;">
+               🔄 ${state.isVariantMode ? '切回原題' : '重新練習（變體）'}
+             </button>`
+          : ''}
+        <button id="next-question-btn" class="primary-btn"
+          style="background:var(--success,#2D6A4F);min-height:44px;">
+          ${isLastQuestion ? '完成單元 🎉' : '下一題 →'}
+        </button>
+      </div>`;
+
+  } else if (hitLimit) {
+    /* ── §14.5.1/14.5.3 答錯3次：中斷機制 ──────────────
+       顯示「查看答案」與「跳過此題」，解除挫折感。      */
+    html += `
+      <div class="mp-frustration-zone">
+        <p>💡 你已經很努力了！先看看答案，繼續下一題吧。</p>
+        <div class="btn-row">
+          <button id="show-answer-btn" class="primary-btn"
+            style="background:var(--gold-mid);min-height:44px;">
+            💡 查看答案與詳解
+          </button>
+          <button id="skip-question-btn" class="primary-btn"
+            style="background:var(--navy-mid);min-height:44px;">
+            ${isLastQuestion ? '完成單元 🎉' : '跳過此題 →'}
+          </button>
+        </div>
       </div>`;
   }
 
-  html += `</div>`; // 關閉 .mp-question-enter
+  html += `</div>`;
 
-  /* ── 寫入 DOM ─────────────────────────────────────── */
   DOM.questionDisplay.innerHTML = html;
 
-  /* ── 動態按鈕事件綁定（統一由 JS 管理）──────────────
-     注意：每次 renderQuestion 都重新建立 DOM，
-     所以需要在此重新綁定，不會有重複監聽器問題。      */
-  $id('toggle-explanation-btn')
-    ?.addEventListener('click', toggleExplanation);
+  // 事件綁定
+  $id('toggle-explanation-btn')?.addEventListener('click', toggleExplanation);
+  $id('retry-variant-btn')?.addEventListener('click', window.retryVariant);
+  $id('next-question-btn')?.addEventListener('click', window.nextQuestion);
 
-  $id('retry-variant-btn')
-    ?.addEventListener('click', window.retryVariant);
+  // §14.5.1 中斷按鈕
+  $id('show-answer-btn')?.addEventListener('click', showAnswerAndExplanation);
+  $id('skip-question-btn')?.addEventListener('click', () => {
+    saveUnitProgress();
+    window.nextQuestion();
+  });
 
-  $id('next-question-btn')
-    ?.addEventListener('click', window.nextQuestion);
+  // 控制輸入區可見性（已答對或已達上限時隱藏）
+  setAnswerZoneVisible(!state.answered && !hitLimit);
 
-  /* ── 答案輸入區可見性 ─────────────────────────────── */
-  setAnswerZoneVisible(!state.answered);
-
-  if (!state.answered && DOM.answerInput) {
+  if (!state.answered && !hitLimit && DOM.answerInput) {
     DOM.answerInput.value    = '';
     DOM.answerInput.disabled = false;
-    // 小延遲聚焦，避免動畫未完成時的佈局抖動
     setTimeout(() => DOM.answerInput?.focus(), 160);
   }
 }
 
 /* ════════════════════════════════════════════════════════════════
-   §7  詳解區展開 / 收起
+   §6.5  §14.5.1 顯示答案與詳解（不計分）
+════════════════════════════════════════════════════════════════ */
+function showAnswerAndExplanation() {
+  const q        = getCurrentQuestion();
+  const unitCode = state.currentUnit;
+  if (!q || !DOM.questionDisplay) return;
+
+  const isLastQuestion = state.currentIndex >= state.questions.length - 1;
+  const expHTML = buildQuestionHTML(q.explanation || '', unitCode);
+
+  // 找到中斷區塊，替換為答案+詳解展示
+  const zone = DOM.questionDisplay.querySelector('.mp-frustration-zone');
+  if (zone) {
+    zone.innerHTML = `
+      <p style="font-weight:700;color:var(--navy-deep);margin-bottom:0.5rem;">
+        ✅ 正確答案：<span style="color:var(--success,#2D6A4F);font-size:1.05rem;">${esc(q.answer)}</span>
+      </p>
+      <div id="mp-explanation-content" class="mp-explanation open" style="
+        background:var(--chalk);border-left:4px solid var(--gold);
+        border-radius:0 12px 12px 0;white-space:pre-wrap;line-height:1.9;font-size:0.93rem;
+        text-align:left;margin-top:0.8rem;">
+        ${expHTML}
+      </div>
+      <div class="btn-row" style="margin-top:1.2rem;">
+        <button id="skip-question-btn" class="primary-btn"
+          style="background:var(--navy-mid);min-height:44px;">
+          ${isLastQuestion ? '完成單元 🎉' : '繼續下一題 →'}
+        </button>
+      </div>
+    `;
+    $id('skip-question-btn')?.addEventListener('click', () => {
+      recordStat(state.currentUnit, 'skipped');
+      saveUnitProgress();
+      window.nextQuestion();
+    });
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   §7  詳解展開/收起
 ════════════════════════════════════════════════════════════════ */
 function toggleExplanation() {
   const content = $id('mp-explanation-content');
   const btn     = $id('toggle-explanation-btn');
   if (!content) return;
-
   const isOpen = content.classList.contains('open');
   content.classList.toggle('open', !isOpen);
-  if (btn) {
-    btn.textContent = isOpen ? '📖 查看詳解' : '📖 收起詳解';
-  }
+  if (btn) btn.textContent = isOpen ? '📖 查看詳解' : '📖 收起詳解';
 }
 
 /* ════════════════════════════════════════════════════════════════
-   §8  答題核心邏輯（由 InputGuard.init 的 onValidSubmit 觸發）
+   §8  答題核心邏輯
 ════════════════════════════════════════════════════════════════ */
 function handleValidSubmit(cleanValue) {
-  // 最終防線：若本題已作答則靜默返回（InputGuard 鎖定是第一道防線）
   if (state.answered) return;
+  if (state.wrongCount >= WRONG_LIMIT) return; // 已達上限，輸入區已隱藏
 
   const { SmartGrader, StorageGuard } = window.MathPrince;
   const q = getCurrentQuestion();
   if (!q) return;
 
-  const result = SmartGrader.gradeAnswer(cleanValue, q.answer, 'auto');
+  /* ── 修正二：複合答案正規化預處理 §14.9.2 ──────────
+     先對使用者輸入與正確答案做正規化，
+     再送給 SmartGrader 進行判定。                     */
+  const { userNorm, correctNorm } = normalizeCompositeAnswer(cleanValue, q.answer);
+  const result = SmartGrader.gradeAnswer(userNorm, correctNorm, 'auto');
 
   if (result.verdict === 'correct') {
-    /* ── 答對流程 ──────────────────────────────────── */
-    state.points  += 10;
-    state.answered = true;
+    /* ── 答對 ── */
+    state.points   += 10;
+    state.answered  = true;
+    state.wrongCount = 0;
     updatePoints();
-
-    // 隱藏輸入區（規避 InputGuard.unlockUI 競態，見 §4 setAnswerZoneVisible 說明）
     setAnswerZoneVisible(false);
 
-    // 視覺回饋（CSS 動畫）
     DOM.submitBtn?.classList.add('mp-correct');
     setTimeout(() => DOM.submitBtn?.classList.remove('mp-correct'), 700);
 
     showToast('🎉 答對了！+10 覺醒積分', 'success', 3000);
 
-    // 存檔（StorageGuard 自動處理失敗 → 觸發 #backupModal）
-    StorageGuard.safeSave({
-      progress: state.currentIndex,
-      points:   state.points,
-      unit:     state.currentUnit,
-    });
+    // 記錄答題統計
+    recordStat(state.currentUnit, 'correct');
 
-    // 重繪：顯示詳解按鈕與下一步控制
+    // 存進度（修正三）
+    saveUnitProgress();
+    StorageGuard.safeSave({ progress: state.currentIndex, points: state.points, unit: state.currentUnit });
+
     renderQuestion();
 
   } else if (result.verdict === 'wrong') {
-    /* ── 答錯流程（允許重試，不鎖定）─────────────────── */
+    /* ── 答錯 ── */
+    state.wrongCount++;
+
     DOM.answerInput?.classList.add('mp-shake');
     setTimeout(() => DOM.answerInput?.classList.remove('mp-shake'), 420);
-    showToast('再想想看，你可以的！💪', 'error', 2500);
-    // InputGuard 的 finally 會自動解鎖 UI
 
+    // 記錄答錯統計
+    recordStat(state.currentUnit, 'wrong');
+
+    if (state.wrongCount >= WRONG_LIMIT) {
+      /* §14.5.1 達到上限：觸發中斷機制 */
+      showToast('沒關係，先看看提示吧！', 'default', 2500);
+      renderQuestion(); // 重繪以顯示中斷區塊
+    } else {
+      const remaining = WRONG_LIMIT - state.wrongCount;
+      showToast(
+        `再想想看，你可以的！💪（還有 ${remaining} 次提示機會）`,
+        'error', 2500
+      );
+    }
   }
-  // verdict === 'invalid' 已由 InputGuard 內部友善提示，此處不重複處理
+  // verdict === 'invalid' 由 InputGuard 內部處理
 }
 
 /* ════════════════════════════════════════════════════════════════
-   §9  全域互動函式（掛載至 window）
-   ─────────────────────────────────────────────────────────────
-   依據 V4.1 §全域作用域修正：所有需與 HTML 互動的函式，
-   必須明確掛載於 window 物件，禁止鎖在私有 IIFE 作用域。
+   §9  全域互動函式
 ════════════════════════════════════════════════════════════════ */
-
-/**
- * window.retryVariant
- * 「重新練習（變體）」/ 「切回原題」按鈕觸發。
- * 核心設計：只改 isVariantMode flag，指向同一題的不同欄位，無需重新 fetch。
- *
- * 邊界條件（§V4.1 總監修正指令）：
- *   Case A — 嘗試切換至 variant，但 variant 欄位不存在或為空：
- *     → 顯示 Toast 告知使用者，自動回退至原題模式，禁止渲染空數據。
- *   Case B — 已在 variant 模式，點擊「切回原題」：
- *     → 正常切回，不受邊界條件影響。
- *   Case C — baseQ 本身不存在（陣列越界防護）：
- *     → 靜默 return，不做任何操作。
- */
 window.retryVariant = function retryVariant() {
-  /* ── Case C：baseQ 越界防護 ──────────────────────── */
   const baseQ = state.questions[state.currentIndex];
-  if (!baseQ) {
-    console.warn('[retryVariant] baseQ 不存在，跳過操作');
-    return;
-  }
+  if (!baseQ) return;
 
-  /* ── Case B：已在 variant 模式 → 切回原題 ────────── */
   if (state.isVariantMode) {
     state.isVariantMode = false;
     state.answered      = false;
+    state.wrongCount    = 0;
     renderQuestion();
     showToast('🔄 已切換回原題目', 'default', 1800);
     return;
   }
 
-  /* ── Case A：嘗試切換至 variant，先驗證欄位完整性 ──────────────────────
-     檢查層次：
-       1. variant 欄位本身存在（非 undefined / null）
-       2. variant 不是空物件 {}（typeof object 但無 question key）
-       3. variant.question 有實際字串內容（非空字串）
-       4. variant.answer   有實際字串內容（非空字串）
-     任一條件不符 → 強制回退原題模式，禁止渲染空殼物件        */
   const v = state.questions[state.currentIndex].variant;
   const variantIsValid = v &&
     typeof v === 'object' &&
@@ -603,61 +606,49 @@ window.retryVariant = function retryVariant() {
     typeof v.answer   === 'string' && v.answer.trim()   !== '';
 
   if (!variantIsValid) {
-    // 確保維持原題模式，防止 getCurrentQuestion() 回傳空殼
     state.isVariantMode = false;
     state.answered      = false;
+    state.wrongCount    = 0;
     showToast('此題已是最終型態，請直接重新挑戰原題', 'default', 2800);
     return;
   }
 
-  /* ── 正常切換至 variant ───────────────────────────── */
   state.isVariantMode = true;
   state.answered      = false;
+  state.wrongCount    = 0;
   renderQuestion();
   showToast('🔄 已切換至變體題目', 'default', 1800);
 };
 
-/**
- * window.nextQuestion
- * 「下一題」按鈕觸發。
- */
 window.nextQuestion = function nextQuestion() {
   if (state.currentIndex < state.questions.length - 1) {
     state.currentIndex++;
     state.isVariantMode = false;
     state.answered      = false;
+    state.wrongCount    = 0;
+    saveUnitProgress();
     renderQuestion();
   } else {
     showFinishScreen();
   }
 };
 
-/**
- * window.openUnit
- * 由單元卡片點擊觸發。
- * 必須為全域（V4.1 §全域作用域修正）。
- *
- * @param {string} unitCode - 'F' | 'P' | 'S' | 'R' | 'C' | 'A' | 'D' | 'E'
- */
 window.openUnit = async function openUnit(unitCode) {
   if (!UNIT_MAP[unitCode]) {
     showToast('找不到對應單元資料', 'error');
     return;
   }
-  // 視圖切換：隱藏選單，顯示題目殼層
   if (DOM.unitMenu)  DOM.unitMenu.style.display  = 'none';
   if (DOM.quizShell) DOM.quizShell.style.display = 'block';
-
   await loadUnit(unitCode);
 };
 
 /* ════════════════════════════════════════════════════════════════
-   §10  資料載入（Task 1：fetch JSON，§14.7 降級機制）
+   §10  資料載入（含進度恢復，修正三）
 ════════════════════════════════════════════════════════════════ */
 async function loadUnit(unitCode) {
   const info = UNIT_MAP[unitCode];
 
-  /* ── 顯示載入動畫 ─────────────────────────────────── */
   if (DOM.questionDisplay) {
     DOM.questionDisplay.innerHTML = `
       <div style="text-align:center;padding:4rem 2rem;color:var(--navy-mid);">
@@ -665,75 +656,56 @@ async function loadUnit(unitCode) {
         <p style="margin-top:1.2rem;font-size:0.95rem;line-height:1.6;">
           正在載入《${info.name}》⋯
         </p>
-      </div>
-    `;
+      </div>`;
   }
   setAnswerZoneVisible(false);
 
   try {
     const response = await fetch(info.file);
-
-    // HTTP 非 2xx 視為失敗（如 404）
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status} — ${info.file}`);
-    }
-
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
+    if (!Array.isArray(data) || data.length === 0) throw new Error('題庫格式異常');
 
-    if (!Array.isArray(data) || data.length === 0) {
-      throw new Error('題庫 JSON 格式異常或為空陣列');
-    }
-
-    /* ── 載入成功：更新狀態並渲染 ─────────────────── */
     state.questions     = data;
-    state.currentIndex  = 0;
     state.isVariantMode = false;
     state.answered      = false;
+    state.wrongCount    = 0;
     state.currentUnit   = unitCode;
+
+    /* ── 修正三：恢復上次進度 ──────────────────────── */
+    const saved = loadUnitProgress(unitCode);
+    if (saved && saved.index > 0 && saved.index < data.length) {
+      state.currentIndex = saved.index;
+      // 積分取較大值（避免用舊積分覆蓋當前較高積分）
+      if (saved.points > state.points) {
+        state.points = saved.points;
+        updatePoints();
+      }
+      showToast(`📌 已從第 ${saved.index + 1} 題繼續`, 'default', 2500);
+    } else {
+      state.currentIndex = 0;
+    }
 
     setAnswerZoneVisible(true);
     renderQuestion();
 
   } catch (err) {
-    /* ── §14.7 降級處理 ──────────────────────────────
-       禁止跳出技術性報錯視窗，改以友善提示引導使用者。  */
     console.error('[Main] 資料載入失敗：', err.message);
-
     if (DOM.questionDisplay) {
       DOM.questionDisplay.innerHTML = `
         <div style="text-align:center;padding:3.5rem 1rem;">
           <div style="font-size:2.5rem;margin-bottom:1rem;">⚠️</div>
-          <h3 style="
-            color:var(--error,#8B1A1A);
-            font-family:'Noto Serif TC',serif;
-            margin-bottom:0.8rem;
-          ">資料讀取異常</h3>
+          <h3 style="color:var(--error,#8B1A1A);font-family:'Noto Serif TC',serif;margin-bottom:0.8rem;">資料讀取異常</h3>
           <p style="color:#666;font-size:0.9rem;margin-bottom:2rem;line-height:1.7;">
-            請確認網路連線正常後重試。<br>
-            若問題持續，請返回首頁重新選擇單元。
+            請確認網路連線正常後重試。<br>若問題持續，請返回首頁重新選擇單元。
           </p>
           <div style="display:flex;gap:0.8rem;justify-content:center;flex-wrap:wrap;">
-            <button
-              class="primary-btn"
-              onclick="window.openUnit('${esc(unitCode)}')"
-              style="min-height:44px;"
-            >🔄 重新載入</button>
-            <button
-              class="primary-btn"
-              onclick="location.reload()"
-              style="
-                background:transparent;
-                border:2px solid var(--navy-deep);
-                color:var(--navy-deep);
-                min-height:44px;
-              "
-            >← 返回首頁</button>
+            <button class="primary-btn" onclick="window.openUnit('${esc(unitCode)}')" style="min-height:44px;">🔄 重新載入</button>
+            <button class="primary-btn" onclick="location.reload()"
+              style="background:transparent;border:2px solid var(--navy-deep);color:var(--navy-deep);min-height:44px;">← 返回首頁</button>
           </div>
-        </div>
-      `;
+        </div>`;
     }
-
-    // §14.7 Toast 友善提示（確保有文字提示）
     showToast('資料讀取異常，請檢查網路', 'error', 4500);
   }
 }
@@ -744,7 +716,12 @@ async function loadUnit(unitCode) {
 function showFinishScreen() {
   if (!DOM.questionDisplay) return;
 
-  // 存儲最終進度
+  /* ── 修正三：完成後不自動清除進度，讓學童自己選擇 ──────────
+     · 「重新開始」→ 清除本單元進度，從第1題重頭練習（適合
+       想重新計分、或遺忘後再挑戰的學童）
+     · 「返回選單」→ 保留進度，下次進入從上次位置繼續
+     (若學童選「重新開始」才呼叫 clearUnitProgress)             */
+
   window.MathPrince.StorageGuard.safeSave({
     progress: state.questions.length,
     points:   state.points,
@@ -752,40 +729,247 @@ function showFinishScreen() {
     completed: true,
   });
 
+  const unitCode = state.currentUnit;
+
   DOM.questionDisplay.innerHTML = `
     <div class="mp-question-enter" style="text-align:center;padding:3.5rem 1rem;">
       <div style="font-size:3.5rem;margin-bottom:1.2rem;">🎓</div>
-      <h2 style="
-        font-family:'Noto Serif TC',serif;
-        color:var(--navy-deep);
-        font-size:1.8rem;
-        margin-bottom:0.6rem;
-      ">恭喜完成本單元！</h2>
-      <p style="
-        color:var(--gold-mid);
-        font-size:1.15rem;
-        margin-bottom:2.5rem;
-        font-weight:600;
-        line-height:1.7;
-      ">
+      <h2 style="font-family:'Noto Serif TC',serif;color:var(--navy-deep);
+        font-size:1.8rem;margin-bottom:0.6rem;">恭喜完成本單元！</h2>
+      <p style="color:var(--gold-mid);font-size:1.15rem;margin-bottom:0.5rem;
+        font-weight:600;line-height:1.7;">
         本次共獲得<br>
         <span style="font-size:2.2rem;font-family:'Crimson Pro',serif;">
           ${state.points}
-        </span>
-        覺醒積分 ✨
+        </span> 覺醒積分 ✨
       </p>
-      <button
-        class="primary-btn"
-        onclick="location.reload()"
-        style="min-height:44px;padding:1rem 3rem;font-size:1.05rem;"
-      >← 返回單元選單</button>
-    </div>
-  `;
+      <p style="font-size:0.85rem;color:#888;margin-bottom:2rem;line-height:1.7;">
+        接下來你想怎麼做？
+      </p>
+      <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;">
+        <button
+          id="restart-unit-btn"
+          class="primary-btn"
+          style="background:var(--gold-mid);min-height:44px;padding:0.9rem 1.8rem;">
+          🔄 重新挑戰（從頭開始）
+        </button>
+        <button
+          class="primary-btn"
+          onclick="location.reload()"
+          style="background:var(--navy-mid);min-height:44px;padding:0.9rem 1.8rem;">
+          ← 返回選單（保留紀錄）
+        </button>
+      </div>
+      <p style="font-size:0.75rem;color:#bbb;margin-top:1.2rem;line-height:1.6;">
+        「保留紀錄」可讓家長查看學習報告；「重新挑戰」積分將重新累計。
+      </p>
+    </div>`;
+
   setAnswerZoneVisible(false);
+
+  // 綁定「重新挑戰」按鈕：清除進度後重新載入本單元
+  $id('restart-unit-btn')?.addEventListener('click', () => {
+    clearUnitProgress(unitCode);
+    // 重置狀態
+    state.currentIndex  = 0;
+    state.isVariantMode = false;
+    state.answered      = false;
+    state.wrongCount    = 0;
+    // 重新載入（不 reload 整頁，保留已累積的總積分）
+    setAnswerZoneVisible(true);
+    loadUnit(unitCode);
+  });
 }
 
 /* ════════════════════════════════════════════════════════════════
-   §12  事件綁定：單元卡片（統一由 JS 管理，不用 HTML onclick）
+   §11.5  覺醒評鑑報告（window.showAssessment）
+   ─────────────────────────────────────────────────────────────
+   稱號系統（依總積分）：
+     0–49   → 🌱 數學學徒
+     50–149 → ⚔️ 數學見習生
+     150–299→ 🛡️ 數學武士
+     300–499→ 🏹 數學騎士
+     500–799→ 👑 數學將軍
+     800+   → ♛  數學王子
+════════════════════════════════════════════════════════════════ */
+
+const RANK_TABLE = [
+  { min: 800, icon: '♛',  title: '數學王子',  color: '#C8960A' },
+  { min: 500, icon: '👑', title: '數學將軍',  color: '#2A4A8A' },
+  { min: 300, icon: '🏹', title: '數學騎士',  color: '#1A6640' },
+  { min: 150, icon: '🛡️', title: '數學武士',  color: '#5A3A8A' },
+  { min: 50,  icon: '⚔️', title: '數學見習生',color: '#8A5A2A' },
+  { min: 0,   icon: '🌱', title: '數學學徒',  color: '#4A6A4A' },
+];
+
+function getRank(points) {
+  return RANK_TABLE.find(r => points >= r.min) || RANK_TABLE[RANK_TABLE.length - 1];
+}
+
+window.showAssessment = function showAssessment() {
+  const stats   = loadAllStats();
+  const points  = state.points;
+  const rank    = getRank(points);
+
+  // 八大單元順序
+  const UNIT_ORDER = [
+    { code: 'F', name: '分數的運算' },
+    { code: 'P', name: '百分率與應用' },
+    { code: 'S', name: '速率與時間' },
+    { code: 'R', name: '比與比例' },
+    { code: 'C', name: '圓與扇形' },
+    { code: 'A', name: '平均數問題' },
+    { code: 'D', name: '圖表判讀' },
+    { code: 'E', name: '一元一次方程' },
+  ];
+
+  // 計算各單元勝率
+  const unitRows = UNIT_ORDER.map(({ code, name }) => {
+    const s    = stats[code] || { attempted: 0, correct: 0, skipped: 0 };
+    const rate = s.attempted > 0 ? Math.round(s.correct / s.attempted * 100) : null;
+    const isWeak = rate !== null && rate < 60;
+    return { code, name, ...s, rate, isWeak };
+  });
+
+  const weakUnits = unitRows.filter(u => u.isWeak).map(u => u.name);
+  const attempted = unitRows.filter(u => u.attempted > 0).length;
+
+  // 下一個稱號
+  const nextRankIdx = RANK_TABLE.findIndex(r => points >= r.min) - 1;
+  const nextRank    = nextRankIdx >= 0 ? RANK_TABLE[nextRankIdx] : null;
+  const nextPts     = nextRank ? nextRank.min - points : 0;
+
+  // 建立 Modal
+  let existing = $id('mp-assessment-modal');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'mp-assessment-modal';
+  overlay.style.cssText = [
+    'position:fixed;inset:0;z-index:3000;',
+    'background:rgba(26,45,90,0.72);backdrop-filter:blur(6px);',
+    'display:flex;align-items:center;justify-content:center;padding:1rem;',
+    'overflow-y:auto;'
+  ].join('');
+
+  // 單元列表 HTML
+  const rowsHTML = unitRows.map(u => {
+    const barW   = u.rate !== null ? u.rate : 0;
+    const barClr = u.rate === null ? '#ccc'
+                 : u.rate >= 80   ? '#2D6A4F'
+                 : u.rate >= 60   ? '#A87C08'
+                 : '#8B1A1A';
+    const badge  = u.isWeak
+      ? `<span style="background:#FFF0F0;color:#8B1A1A;font-size:0.68rem;
+           padding:2px 7px;border-radius:4px;margin-left:6px;font-weight:700;">需加強</span>`
+      : '';
+    const rateStr = u.rate !== null ? `${u.rate}%` : '未作答';
+
+    return `
+      <div style="margin-bottom:0.9rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;
+          margin-bottom:0.3rem;font-size:0.83rem;">
+          <span style="color:#1A2D5A;font-weight:600;">Unit ${u.code === 'F' ? '01'
+            : u.code === 'P' ? '02' : u.code === 'S' ? '03' : u.code === 'R' ? '04'
+            : u.code === 'C' ? '05' : u.code === 'A' ? '06' : u.code === 'D' ? '07' : '08'}
+            &nbsp;${u.name}${badge}</span>
+          <span style="color:${barClr};font-weight:700;font-size:0.85rem;">${rateStr}</span>
+        </div>
+        <div style="background:#E6ECF7;border-radius:6px;height:10px;overflow:hidden;">
+          <div style="background:${barClr};height:100%;width:${barW}%;
+            border-radius:6px;transition:width 0.6s ease;"></div>
+        </div>
+        <div style="font-size:0.72rem;color:#888;margin-top:0.2rem;">
+          作答 ${u.attempted} 次・答對 ${u.correct} 題・跳過 ${u.skipped} 題
+        </div>
+      </div>`;
+  }).join('');
+
+  const weakHTML = weakUnits.length > 0
+    ? `<div style="background:#FFF8E7;border:1px solid #C8960A;border-radius:10px;
+         padding:0.9rem 1.2rem;margin-top:1rem;">
+         <p style="font-size:0.82rem;font-weight:700;color:#8A5A2A;margin-bottom:0.3rem;">
+           ⚠️ 建議加強的單元
+         </p>
+         <p style="font-size:0.82rem;color:#5A3A1A;line-height:1.7;">
+           ${weakUnits.join('、')}
+         </p>
+       </div>`
+    : attempted > 0
+      ? `<div style="background:#F0F8F4;border:1px solid #2D6A4F;border-radius:10px;
+           padding:0.9rem 1.2rem;margin-top:1rem;">
+           <p style="font-size:0.82rem;color:#2D6A4F;font-weight:600;">
+             ✅ 目前作答表現良好，繼續保持！
+           </p>
+         </div>`
+      : '';
+
+  const nextHTML = nextRank
+    ? `<p style="font-size:0.8rem;color:#888;margin-top:0.4rem;">
+         再獲得 <strong style="color:#C8960A;">${nextPts} 分</strong>
+         即可晉升「${nextRank.icon} ${nextRank.title}」
+       </p>`
+    : `<p style="font-size:0.8rem;color:#C8960A;margin-top:0.4rem;">
+         ♛ 已達最高榮耀！
+       </p>`;
+
+  overlay.innerHTML = `
+    <div style="background:#FAFAF6;border-radius:24px;width:100%;max-width:560px;
+      padding:2.5rem 2rem;position:relative;max-height:90vh;overflow-y:auto;">
+
+      <!-- 關閉按鈕 -->
+      <button onclick="document.getElementById('mp-assessment-modal').remove()"
+        style="position:absolute;top:1.2rem;right:1.2rem;background:none;border:none;
+          font-size:1.4rem;cursor:pointer;color:#888;line-height:1;">✕</button>
+
+      <!-- 稱號區 -->
+      <div style="text-align:center;margin-bottom:1.8rem;">
+        <div style="font-size:3rem;margin-bottom:0.4rem;">${rank.icon}</div>
+        <h2 style="font-family:'Noto Serif TC',serif;color:${rank.color};
+          font-size:1.6rem;margin-bottom:0.1rem;">${rank.title}</h2>
+        <p style="font-family:'Crimson Pro',Georgia,serif;font-style:italic;
+          font-size:0.85rem;color:#aaa;letter-spacing:0.1em;">
+          覺醒評鑑報告
+        </p>
+        <div style="font-size:2.4rem;font-weight:700;color:#1A2D5A;
+          font-family:'Crimson Pro',Georgia,serif;margin-top:0.5rem;">
+          ${points} <span style="font-size:1rem;color:#888;font-weight:400;">覺醒積分</span>
+        </div>
+        ${nextHTML}
+      </div>
+
+      <!-- 分隔線 -->
+      <div style="height:1px;background:linear-gradient(90deg,transparent,#C8960A,transparent);
+        margin-bottom:1.5rem;"></div>
+
+      <!-- 八大單元勝率 -->
+      <h3 style="font-family:'Noto Serif TC',serif;font-size:1rem;color:#1A2D5A;
+        margin-bottom:1rem;">📊 各單元作答勝率</h3>
+      ${rowsHTML}
+
+      <!-- 弱點分析 -->
+      ${weakHTML}
+
+      <!-- 底部按鈕 -->
+      <div style="text-align:center;margin-top:1.5rem;">
+        <button onclick="document.getElementById('mp-assessment-modal').remove()"
+          class="primary-btn" style="min-height:44px;padding:0.8rem 2.5rem;">
+          繼續練習 →
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  // 點擊背景關閉
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) overlay.remove();
+  });
+};
+
+/* ════════════════════════════════════════════════════════════════
+   §12  事件綁定
 ════════════════════════════════════════════════════════════════ */
 function bindUnitCardEvents() {
   const cards = document.querySelectorAll('#unit-menu .unit-card');
@@ -793,7 +977,6 @@ function bindUnitCardEvents() {
     card.addEventListener('click', () => {
       const code = card.dataset.unit;
       if (!code) return;
-      // 點擊視覺回饋
       card.classList.add('mp-loading');
       setTimeout(() => card.classList.remove('mp-loading'), 1800);
       window.openUnit(code);
@@ -802,69 +985,31 @@ function bindUnitCardEvents() {
 }
 
 /* ════════════════════════════════════════════════════════════════
-   §13  初始化入口（DOMContentLoaded）
+   §13  初始化
 ════════════════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
-
-  /* ① 注入 StorageGuard 所需 Modal DOM（最先執行）*/
   injectStorageGuardModals();
-
-  /* ② 快取 DOM 參照 */
   initDOMCache();
 
-  /* ③ 解構三大模組 */
   const { StorageGuard, InputGuard } = window.MathPrince;
 
-  /* ④ 恢復已儲存的積分（可選） */
   const saved = StorageGuard.safeLoad();
   if (saved?.points) {
     state.points = saved.points;
     updatePoints();
   }
 
-  /* ⑤ 綁定單元卡片點擊 */
   bindUnitCardEvents();
 
-  /* ⑥ 初始化 InputGuard（唯一呼叫點，統一管理 #answer-input / #submit-btn）
-     onValidSubmit 使用動態閉包：執行時才讀取 getCurrentQuestion()，
-     因此無需在題目切換時重新 init。                                         */
   InputGuard.init({
-    // inputEl / submitEl 省略，使用模組預設（#answer-input / #submit-btn）
-    onValidSubmit: (cleanValue) => {
-      handleValidSubmit(cleanValue);
-    }
+    onValidSubmit: (cleanValue) => { handleValidSubmit(cleanValue); }
   });
 
-  /* ⑦ 頁面關閉前自動存檔 */
   StorageGuard.setupBeforeUnloadGuard(() => ({
     progress: state.currentIndex,
     points:   state.points,
     unit:     state.currentUnit,
   }));
 
-  /* ⑧ ┌────────────────────────────────────────────────────────┐
-        │  §14.6 / §14.7 負向測試接口（僅開發用）               │
-        │  上線前請移除或保持此區塊為全部註解狀態               │
-        └────────────────────────────────────────────────────────┘
-
-     // 測試 A：存檔失敗模擬 → 應觸發 #backupModal + Base64 備份碼
-     StorageGuard.setForceFailMode(true);
-     StorageGuard.safeSave({ progress: 3, points: 30 });
-
-     // 測試 B：資料加載失敗 → 修改任一 URL 後呼叫 openUnit
-     //   例：臨時改 UNIT_MAP['F'].file = 'DATA/not_exist.json'
-     //       再呼叫 window.openUnit('F')
-     //       → 應顯示友善錯誤頁 + Toast「資料讀取異常，請檢查網路」
-
-     // 測試 C：狀態鎖定驗證
-     //   正常作答（答對）後，開啟 DevTools：
-     //   · Elements 面板確認 .answer-zone style="display:none"
-     //   · #submit-btn 雖被 InputGuard 解鎖，但整個區塊已隱藏
-  */
-
-  console.log(
-    '[D 組 main.js] ✅ 初始化完成',
-    '· SmartGrader / StorageGuard / InputGuard 已掛載',
-    '· openUnit / retryVariant / nextQuestion 已掛載至 window'
-  );
+  console.log('[D 組 main.js V4.2] ✅ 初始化完成');
 });
