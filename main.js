@@ -55,6 +55,9 @@
       state.currentUnit = unitId;
       state.questions = data;
       state.currentIndex = 0;
+      document.getElementById('unit-menu').style.display = 'none';
+      document.getElementById('quiz-shell').style.display = 'block';
+      renderQuestion();
       runtime.isVariantMode = false;
 
       renderQuestion();
