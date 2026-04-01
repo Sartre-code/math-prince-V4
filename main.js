@@ -60,7 +60,7 @@
       renderQuestion();
       runtime.isVariantMode = false;
 
-      renderQuestion();
+      
       updateDashboard();
       showToast(`單元 ${unitId} 載入成功`, 'success');
       
