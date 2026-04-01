@@ -133,7 +133,7 @@
             return;
         }
         handleAnswer(userAns);
-    };
+    };  
 }
 
 function handleAnswer(userAns) {
@@ -160,7 +160,7 @@ function handleAnswer(userAns) {
             showToast(result.feedback || '再想一下喔！', 'error');
         }
     } catch (error) {
-        console.error(error);
+        console.error("評分出錯:"error);
         showToast('系統思考中...', 'error');
     }
 }
