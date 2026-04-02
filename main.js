@@ -42,6 +42,8 @@ const WRONG_LIMIT = 3;
 
 /* localStorage 進度 key */
 const PROGRESS_KEY = 'mp_unit_progress';
+/* localStorage 各單元答題統計 key */
+const STATS_KEY    = 'mp_unit_stats';
 
 function getCurrentQuestion() {
   const base = state.questions[state.currentIndex];
