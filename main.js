@@ -363,18 +363,42 @@ function normalizeCompositeAnswer(userInput, correctAnswer) {
 
     // P3：同義詞正規化（§14.9.2 語意等價擴充）
     //   「相等/一樣/相同/不差」→ 統一為「相等」
-    //   適用場景：F17「相等，差0公尺」學童可能答「一樣」「相同」
     s = s.replace(/一樣|相同|不差/g, '相等');
+
+    // P3b：文字答案裝飾前綴剝除
+    //   適用 Unit7 趨勢判斷題：
+    //     「整體呈現上升」→「上升」
+    //     「整體呈現下降」→「下降」
+    //     「呈上升趨勢」  →「上升」
+    //   適用 Unit2 比較題：
+    //     「活動A比較便宜」→「活動A」（保留主體）
+    //   剝除：「整體呈現」「整體」「呈現」「呈」「趨勢」「比較便宜」「比較貴」
+    s = s.replace(/整體呈現|整體|呈現(?=[上下先])/g, '');
+    s = s.replace(/趨勢/g, '');
+    s = s.replace(/呈(?=[上下先升降])/g, '');
+    // 「比較便宜」「比較貴」→「便宜」「貴」（保留核心比較詞）
+    s = s.replace(/比較(便宜|貴|划算|少|多)/g, '$1');
 
     // P4：零差值正規化
     //   「多0」「少0」「差0」「多 0」→ 移除方向詞，只保留「0」
     //   使「相等，差0公尺」= 「相等，多0公尺」= 「相等，0公尺」
     s = s.replace(/(多|少|差)\s*0/g, '0');
 
+    // P3c：狀態類同義詞
+    //   「沒有改變」「保持不變」「維持不變」→「不變」
+    //   「先升後降」「先漲後跌」→「先升後降」
+    s = s.replace(/沒有改變|保持不變|維持不變/g, '不變');
+    s = s.replace(/先漲後跌|先高後低/g, '先升後降');
+
     // P5：移除答案修飾詞（全局）
     //   「剩下」「共有」「共」「約」「相差」「合計」「一共」「總共」
     //   「結果是」「答案是」「等於」「得」「賺」「賠」前綴
     s = s.replace(/剩下|共有|共|約|相差|合計|一共|總共|結果是|答案是|等於|得(?=\d)/g, '');
+
+    // P5b：移除所有空白（含半形空格）
+    //   「活動 A 便宜」→「活動A便宜」
+    //   「第二節 到 第三節」→「第二節到第三節」
+    s = s.replace(/\s/g, '');
 
     // P6：逗號前後冗餘空白
     s = s.replace(/\s*，\s*/g, '，');
@@ -621,6 +645,27 @@ function handleValidSubmit(cleanValue) {
     renderQuestion();
 
   } else if (result.verdict === 'wrong') {
+    /* ── 答錯流程前：純文字答案備援比對（§14.9.2 擴充）
+       SmartGrader 以數值邏輯為主，無法判斷純文字是否等值。
+       若正規化後的字串完全相同，視為答對。
+       適用：Unit7 趨勢題、Unit2 比較題、Unit6 不變題等。  */
+    if (userNorm === correctNorm && userNorm.length > 0) {
+      // 強制答對
+      state.points   += 10;
+      state.answered  = true;
+      state.wrongCount = 0;
+      updatePoints();
+      setAnswerZoneVisible(false);
+      DOM.submitBtn?.classList.add('mp-correct');
+      setTimeout(() => DOM.submitBtn?.classList.remove('mp-correct'), 700);
+      showToast('🎉 答對了！+10 覺醒積分', 'success', 3000);
+      recordStat(state.currentUnit, 'correct');
+      saveUnitProgress();
+      StorageGuard.safeSave({ progress: state.currentIndex, points: state.points, unit: state.currentUnit });
+      renderQuestion();
+      return;
+    }
+
     /* ── 答錯 ── */
     state.wrongCount++;
 
