@@ -106,6 +106,81 @@ header::before {
   100% { filter: grayscale(0) brightness(1.1) drop-shadow(0 0 10px rgba(200,150,10,0.85)); }
 }
 
+/* ══ 王子進化階段 CSS（D組 V4.5）══════════════════════════════
+   header 的 data-stage 屬性由 updateCrownStage() 動態寫入：
+   stage-0 學徒（0–49）   stage-1 見習生（50–149）
+   stage-2 武士（150–299） stage-3 騎士（300–499）
+   stage-4 將軍（500–799） stage-5 王子（800+）
+═══════════════════════════════════════════════════════════ */
+header[data-stage="0"] { background: #1A2D5A; }
+header[data-stage="1"] { background: linear-gradient(160deg,#1A2D5A 0%,#2A3A6A 100%); }
+header[data-stage="2"] { background: linear-gradient(160deg,#1A2D5A 0%,#3A2A7A 60%,#1A2D5A 100%); }
+header[data-stage="3"] { background: linear-gradient(160deg,#12205A 0%,#4A2A6A 50%,#1A3560 100%); }
+header[data-stage="4"] { background: linear-gradient(160deg,#0A1840 0%,#5A3A2A 40%,#8A6A1A 70%,#1A2D5A 100%); }
+header[data-stage="5"] {
+  background: linear-gradient(160deg,#0A1030 0%,#1A2D5A 30%,#6A4A10 60%,#0A1030 100%);
+  position: relative;
+}
+
+/* 各階段王冠最終靜止狀態 */
+header[data-stage="0"] .crown-icon { filter: grayscale(0.6) brightness(0.7); }
+header[data-stage="1"] .crown-icon { filter: grayscale(0.3) brightness(0.9) drop-shadow(0 0 4px rgba(200,150,10,0.4)); }
+header[data-stage="2"] .crown-icon { filter: grayscale(0) brightness(1.0) drop-shadow(0 0 8px rgba(150,100,200,0.6)); }
+header[data-stage="3"] .crown-icon { filter: grayscale(0) brightness(1.1) drop-shadow(0 0 12px rgba(200,150,10,0.7)); }
+header[data-stage="4"] .crown-icon { filter: grayscale(0) brightness(1.3) drop-shadow(0 0 18px rgba(245,210,50,0.9)); }
+header[data-stage="5"] .crown-icon {
+  filter: grayscale(0) brightness(1.5) drop-shadow(0 0 24px rgba(255,230,100,1));
+  animation: crownAwaken 3.2s ease-out forwards, crownRoyalPulse 2s ease-in-out 3.2s infinite;
+}
+@keyframes crownRoyalPulse {
+  0%,100% { filter: grayscale(0) brightness(1.4) drop-shadow(0 0 18px rgba(255,220,80,0.9)); }
+  50%     { filter: grayscale(0) brightness(1.8) drop-shadow(0 0 32px rgba(255,240,120,1)); }
+}
+
+/* 各階段光暈強度 */
+header[data-stage="0"] .crown-glow { background: radial-gradient(circle,rgba(200,150,10,0.2) 0%,transparent 70%); }
+header[data-stage="1"] .crown-glow { background: radial-gradient(circle,rgba(200,150,10,0.4) 0%,transparent 70%); }
+header[data-stage="2"] .crown-glow { background: radial-gradient(circle,rgba(150,100,200,0.5) 0%,transparent 70%); width:80px;height:80px; }
+header[data-stage="3"] .crown-glow { background: radial-gradient(circle,rgba(200,150,10,0.6) 0%,transparent 70%); width:90px;height:90px; }
+header[data-stage="4"] .crown-glow { background: radial-gradient(circle,rgba(245,210,50,0.7) 0%,transparent 70%); width:100px;height:100px; }
+header[data-stage="5"] .crown-glow {
+  background: radial-gradient(circle,rgba(255,230,100,0.85) 0%,rgba(200,150,10,0.4) 50%,transparent 70%);
+  width:120px;height:120px;
+}
+
+/* 第5階段星光粒子 */
+header[data-stage="5"]::after {
+  content:'✦ ✧ ✦ ✧ ✦ ✧ ✦ ✧';
+  position:absolute;top:0.6rem;left:0;right:0;
+  font-size:0.7rem;color:rgba(255,230,100,0.35);
+  text-align:center;letter-spacing:1.5rem;
+  animation:starFloat 4s ease-in-out infinite;
+  pointer-events:none;
+}
+@keyframes starFloat {
+  0%,100%{transform:translateY(0);opacity:0.35;}
+  50%{transform:translateY(-4px);opacity:0.6;}
+}
+
+/* 各階段主標文字漸進發光 */
+header[data-stage="4"] .logo-area h1,
+header[data-stage="5"] .logo-area h1 {
+  text-shadow: 0 0 20px rgba(245,210,50,0.4), 0 2px 16px rgba(0,0,0,0.35);
+}
+
+/* 稱號徽章（顯示在積分卡下方）*/
+#rank-badge {
+  text-align:center;
+  font-family:'Crimson Pro',Georgia,serif;
+  font-size:0.85rem;
+  color:var(--gold-mid);
+  font-style:italic;
+  letter-spacing:0.08em;
+  margin-top:0.3rem;
+  transition:all 0.5s ease;
+  min-height:1.2em;
+}
+
 /* ── 主標 ── */
 .logo-area h1 {
   font-family: 'Noto Serif TC', serif;
@@ -419,6 +494,7 @@ input[type="text"]:focus { border-color: var(--gold); }
     <div class="stat-card">
       <div class="stat-label">覺醒積分</div>
       <div class="stat-value" id="user-points">0</div>
+      <div id="rank-badge">🌱 數學學徒</div>
     </div>
   </section>
 
@@ -466,9 +542,15 @@ input[type="text"]:focus { border-color: var(--gold); }
       <h3>🏆 每答對一題，獲得 10 覺醒積分</h3>
       <p>支援變體題練習・完整解題詳解・進度自動儲存</p>
     </div>
-    <button class="cta-btn" onclick="window.showAssessment()">
-      ♛ 覺醒評鑑
-    </button>
+    <div style="display:flex;gap:0.7rem;flex-wrap:wrap;justify-content:flex-end;">
+      <button class="cta-btn" onclick="window.showAssessment()">
+        ♛ 覺醒評鑑
+      </button>
+      <button class="cta-btn" onclick="window.showParentReport()"
+        style="background:var(--chalk);color:var(--navy-deep);font-weight:700;">
+        👨‍👩‍👧 家長報告
+      </button>
+    </div>
   </div>
 
   <!-- ══ 家長說明 ══ -->

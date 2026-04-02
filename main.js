@@ -198,6 +198,41 @@ function injectStorageGuardModals() {
 ════════════════════════════════════════════════════════════════ */
 function updatePoints() {
   if (DOM.userPoints) DOM.userPoints.textContent = state.points;
+  updateCrownStage(state.points);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   §4.1  王子視覺進化（updateCrownStage）
+   ─────────────────────────────────────────────────────────────
+   依積分在 header 設定 data-stage 屬性，觸發 CSS 視覺階段切換。
+   同步更新積分卡下方的稱號徽章（#rank-badge）。
+════════════════════════════════════════════════════════════════ */
+function updateCrownStage(points) {
+  const header = document.querySelector('header');
+  const badge  = document.getElementById('rank-badge');
+  if (!header) return;
+
+  // 對應 RANK_TABLE 的6個階段
+  let stage, icon, title;
+  if      (points >= 800) { stage = 5; icon = '♛';  title = '數學王子';   }
+  else if (points >= 500) { stage = 4; icon = '👑';  title = '數學將軍';   }
+  else if (points >= 300) { stage = 3; icon = '🏹';  title = '數學騎士';   }
+  else if (points >= 150) { stage = 2; icon = '🛡️'; title = '數學武士';   }
+  else if (points >= 50)  { stage = 1; icon = '⚔️';  title = '數學見習生'; }
+  else                    { stage = 0; icon = '🌱';  title = '數學學徒';   }
+
+  const prev = parseInt(header.dataset.stage ?? '-1');
+  header.dataset.stage = stage;
+
+  // 稱號徽章更新
+  if (badge) badge.textContent = `${icon} ${title}`;
+
+  // 首次升階：顯示慶祝 Toast
+  if (prev !== -1 && stage > prev) {
+    setTimeout(() => {
+      showToast(`🎉 稱號晉升！您已成為「${icon} ${title}」！`, 'success', 4000);
+    }, 300);
+  }
 }
 
 function showToast(msg, type = 'default', dur = 3000) {
@@ -999,6 +1034,205 @@ window.showAssessment = function showAssessment() {
 };
 
 /* ════════════════════════════════════════════════════════════════
+   §11.6  家長學習報告（window.showParentReport）
+   ─────────────────────────────────────────────────────────────
+   設計目標：
+   · 正式、清晰、數據導向（與學童評鑑的遊戲風格區隔）
+   · 顯示各單元的正確率、作答量、弱點警示
+   · 提供建議語句幫助家長引導孩子
+   · 可一鍵列印（window.print()）
+════════════════════════════════════════════════════════════════ */
+window.showParentReport = function showParentReport() {
+  const stats  = loadAllStats();
+  const points = state.points;
+  const rank   = getRank(points);
+
+  const UNIT_ORDER = [
+    { code: 'F', name: '分數的運算',   num: '01' },
+    { code: 'P', name: '百分率與應用', num: '02' },
+    { code: 'S', name: '速率與時間',   num: '03' },
+    { code: 'R', name: '比與比例',     num: '04' },
+    { code: 'C', name: '圓與扇形',     num: '05' },
+    { code: 'A', name: '平均數問題',   num: '06' },
+    { code: 'D', name: '圖表判讀',     num: '07' },
+    { code: 'E', name: '一元一次方程', num: '08' },
+  ];
+
+  const rows = UNIT_ORDER.map(({ code, name, num }) => {
+    const s    = stats[code] || { attempted: 0, correct: 0, skipped: 0 };
+    const rate = s.attempted > 0 ? Math.round(s.correct / s.attempted * 100) : null;
+    return { code, name, num, ...s, rate,
+      level: rate === null ? 'none'
+           : rate >= 80   ? 'good'
+           : rate >= 60   ? 'fair'
+           : 'weak'
+    };
+  });
+
+  const attempted   = rows.filter(r => r.attempted > 0).length;
+  const totalQ      = rows.reduce((a, r) => a + r.attempted, 0);
+  const totalCorrect= rows.reduce((a, r) => a + r.correct,  0);
+  const totalRate   = totalQ > 0 ? Math.round(totalCorrect / totalQ * 100) : null;
+  const weakUnits   = rows.filter(r => r.level === 'weak');
+  const goodUnits   = rows.filter(r => r.level === 'good');
+  const today       = new Date().toLocaleDateString('zh-TW', { year:'numeric', month:'long', day:'numeric' });
+
+  // 建議語句
+  const suggestions = weakUnits.length === 0 && attempted === 0
+    ? ['孩子尚未開始使用本平台，建議引導孩子從第一單元開始練習。']
+    : weakUnits.length === 0
+      ? ['孩子目前表現良好，建議持續練習以維持學習狀態。',
+         '可鼓勵孩子嘗試挑戰變體題，進一步鞏固觀念。']
+      : [
+          `建議重點加強：${weakUnits.map(u => u.name).join('、')}。`,
+          '可在親子共學時，先從詳解引導孩子理解解題步驟。',
+          '每天練習1至2題，持續累積比一次大量練習更有效。',
+        ];
+
+  // 移除舊 Modal
+  document.getElementById('mp-parent-modal')?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'mp-parent-modal';
+  overlay.style.cssText = [
+    'position:fixed;inset:0;z-index:3000;',
+    'background:rgba(26,45,90,0.75);backdrop-filter:blur(6px);',
+    'display:flex;align-items:flex-start;justify-content:center;',
+    'padding:1.5rem 1rem;overflow-y:auto;'
+  ].join('');
+
+  // 表格列
+  const tableRows = rows.map(r => {
+    const statusTxt = r.level === 'none' ? '未作答'
+                    : r.level === 'good' ? '✅ 良好'
+                    : r.level === 'fair' ? '⚠️ 普通'
+                    : '❗ 需加強';
+    const statusClr = r.level === 'good' ? '#2D6A4F'
+                    : r.level === 'fair' ? '#8A6A1A'
+                    : r.level === 'weak' ? '#8B1A1A'
+                    : '#aaa';
+    const rateStr   = r.rate !== null ? `${r.rate}%` : '—';
+    return `
+      <tr style="border-bottom:1px solid #eee;">
+        <td style="padding:0.55rem 0.5rem;font-size:0.83rem;color:#1A2D5A;font-weight:600;">
+          Unit ${r.num}　${r.name}
+        </td>
+        <td style="padding:0.55rem 0.5rem;text-align:center;font-size:0.83rem;color:#444;">
+          ${r.attempted}
+        </td>
+        <td style="padding:0.55rem 0.5rem;text-align:center;font-size:0.83rem;
+          font-weight:700;color:${statusClr};">
+          ${rateStr}
+        </td>
+        <td style="padding:0.55rem 0.5rem;text-align:center;font-size:0.78rem;
+          color:${statusClr};font-weight:600;">
+          ${statusTxt}
+        </td>
+      </tr>`;
+  }).join('');
+
+  const suggHTML = suggestions.map(s =>
+    `<li style="margin-bottom:0.4rem;line-height:1.7;font-size:0.83rem;">${s}</li>`
+  ).join('');
+
+  overlay.innerHTML = `
+    <div id="mp-parent-report-body" style="
+      background:#FAFAF6;border-radius:20px;width:100%;max-width:620px;
+      padding:2.5rem 2rem;position:relative;">
+
+      <!-- 列印按鈕 -->
+      <button onclick="window.print()"
+        style="position:absolute;top:1.2rem;right:4rem;background:var(--navy-light,#E6ECF7);
+          border:none;border-radius:8px;padding:0.4rem 0.9rem;font-size:0.78rem;
+          color:var(--navy-deep,#1A2D5A);cursor:pointer;font-weight:600;">🖨️ 列印</button>
+      <button onclick="document.getElementById('mp-parent-modal').remove()"
+        style="position:absolute;top:1.2rem;right:1.2rem;background:none;border:none;
+          font-size:1.4rem;cursor:pointer;color:#aaa;">✕</button>
+
+      <!-- 標題 -->
+      <div style="text-align:center;margin-bottom:1.8rem;border-bottom:2px solid var(--navy-light,#E6ECF7);padding-bottom:1.5rem;">
+        <p style="font-size:0.75rem;color:#aaa;letter-spacing:0.15em;margin-bottom:0.3rem;">
+          數學王子的覺醒 — 學習歷程報告
+        </p>
+        <h2 style="font-family:'Noto Serif TC',serif;color:#1A2D5A;font-size:1.4rem;margin-bottom:0.3rem;">
+          👨‍👩‍👧 家長學習報告
+        </h2>
+        <p style="font-size:0.78rem;color:#888;">報告日期：${today}</p>
+      </div>
+
+      <!-- 總覽 -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.8rem;margin-bottom:1.8rem;">
+        <div style="background:var(--navy-light,#E6ECF7);border-radius:10px;padding:0.9rem;text-align:center;">
+          <div style="font-size:0.72rem;color:#2A4A8A;font-weight:600;margin-bottom:0.2rem;">覺醒積分</div>
+          <div style="font-size:1.6rem;font-weight:700;color:#1A2D5A;font-family:'Crimson Pro',serif;">${points}</div>
+        </div>
+        <div style="background:var(--navy-light,#E6ECF7);border-radius:10px;padding:0.9rem;text-align:center;">
+          <div style="font-size:0.72rem;color:#2A4A8A;font-weight:600;margin-bottom:0.2rem;">目前稱號</div>
+          <div style="font-size:1rem;font-weight:700;color:#1A2D5A;">${rank.icon} ${rank.title}</div>
+        </div>
+        <div style="background:var(--navy-light,#E6ECF7);border-radius:10px;padding:0.9rem;text-align:center;">
+          <div style="font-size:0.72rem;color:#2A4A8A;font-weight:600;margin-bottom:0.2rem;">整體正確率</div>
+          <div style="font-size:1.6rem;font-weight:700;color:#1A2D5A;font-family:'Crimson Pro',serif;">
+            ${totalRate !== null ? totalRate + '%' : '—'}
+          </div>
+        </div>
+      </div>
+
+      <!-- 各單元詳表 -->
+      <h3 style="font-family:'Noto Serif TC',serif;font-size:0.95rem;color:#1A2D5A;
+        margin-bottom:0.8rem;">📋 各單元學習詳況</h3>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:1.5rem;">
+        <thead>
+          <tr style="background:var(--navy-deep,#1A2D5A);color:#fff;">
+            <th style="padding:0.55rem 0.5rem;text-align:left;font-size:0.78rem;border-radius:8px 0 0 0;">單元名稱</th>
+            <th style="padding:0.55rem 0.5rem;text-align:center;font-size:0.78rem;">作答次數</th>
+            <th style="padding:0.55rem 0.5rem;text-align:center;font-size:0.78rem;">正確率</th>
+            <th style="padding:0.55rem 0.5rem;text-align:center;font-size:0.78rem;border-radius:0 8px 0 0;">學習狀態</th>
+          </tr>
+        </thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+
+      <!-- 弱點分布 -->
+      ${weakUnits.length > 0 ? `
+      <div style="background:#FFF8E7;border-left:4px solid #C8960A;border-radius:0 10px 10px 0;
+        padding:1rem 1.2rem;margin-bottom:1.2rem;">
+        <p style="font-weight:700;color:#8A5A2A;font-size:0.85rem;margin-bottom:0.4rem;">
+          ⚠️ 需要重點加強的單元
+        </p>
+        <p style="font-size:0.82rem;color:#5A3A1A;line-height:1.7;">
+          ${weakUnits.map(u => `Unit ${u.num}「${u.name}」（正確率 ${u.rate}%）`).join('　｜　')}
+        </p>
+      </div>` : ''}
+
+      <!-- 家長建議 -->
+      <div style="background:#F0F4FA;border-radius:10px;padding:1rem 1.2rem;margin-bottom:1.5rem;">
+        <p style="font-weight:700;color:#1A2D5A;font-size:0.85rem;margin-bottom:0.6rem;">
+          💡 給家長的建議
+        </p>
+        <ul style="padding-left:1.2rem;color:#444;">${suggHTML}</ul>
+      </div>
+
+      <!-- 說明 -->
+      <p style="font-size:0.7rem;color:#ccc;text-align:center;line-height:1.7;">
+        ※ 統計資料儲存於本裝置，不上傳至伺服器，請勿清除瀏覽器資料以免遺失紀錄。<br>
+        ※ 正確率統計從安裝評鑑功能後開始累積。
+      </p>
+
+      <!-- 關閉 -->
+      <div style="text-align:center;margin-top:1.2rem;">
+        <button onclick="document.getElementById('mp-parent-modal').remove()"
+          class="primary-btn" style="min-height:44px;padding:0.8rem 2.5rem;">
+          關閉報告
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+};
+
+/* ════════════════════════════════════════════════════════════════
    §12  事件綁定
 ════════════════════════════════════════════════════════════════ */
 function bindUnitCardEvents() {
@@ -1026,7 +1260,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const saved = StorageGuard.safeLoad();
   if (saved?.points) {
     state.points = saved.points;
-    updatePoints();
+    updatePoints(); // 同步觸發 updateCrownStage
+  } else {
+    updateCrownStage(0); // 初始階段
   }
 
   bindUnitCardEvents();
