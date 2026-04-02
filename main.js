@@ -268,6 +268,10 @@ function clearUnitProgress(unitCode) {
 ════════════════════════════════════════════════════════════════ */
 function recordStat(unitCode, type) {
   // type: 'correct' | 'wrong' | 'skipped'
+  if (!unitCode) {
+    console.warn('[Stats] unitCode 為空，略過記錄');
+    return;
+  }
   try {
     const raw   = localStorage.getItem(STATS_KEY);
     const data  = raw ? JSON.parse(raw) : {};
@@ -276,7 +280,10 @@ function recordStat(unitCode, type) {
     else if (type === 'wrong')   { data[unitCode].attempted++; }
     else if (type === 'skipped') { data[unitCode].skipped++;   }
     localStorage.setItem(STATS_KEY, JSON.stringify(data));
-  } catch (_) {}
+    console.log('[Stats] 記錄', unitCode, type, data[unitCode]);
+  } catch (err) {
+    console.error('[Stats] 記錄失敗：', err);
+  }
 }
 
 function loadAllStats() {
@@ -319,28 +326,48 @@ function normalizeCompositeAnswer(userInput, correctAnswer) {
     // P2：統一複合分隔符 → 逗號（頓號、分號、換行、全形逗號）
     s = s.replace(/[、；\n\r\uff0c]/g, '，');
 
-    // P3：移除答案修飾詞（全局）
+    // P3：同義詞正規化（§14.9.2 語意等價擴充）
+    //   「相等/一樣/相同/不差」→ 統一為「相等」
+    //   適用場景：F17「相等，差0公尺」學童可能答「一樣」「相同」
+    s = s.replace(/一樣|相同|不差/g, '相等');
+
+    // P4：零差值正規化
+    //   「多0」「少0」「差0」「多 0」→ 移除方向詞，只保留「0」
+    //   使「相等，差0公尺」= 「相等，多0公尺」= 「相等，0公尺」
+    s = s.replace(/(多|少|差)\s*0/g, '0');
+
+    // P5：移除答案修飾詞（全局）
     //   「剩下」「共有」「共」「約」「相差」「合計」「一共」「總共」
-    //   「結果是」「答案是」「等於」「得」「為」（字首單字）
+    //   「結果是」「答案是」「等於」「得」「賺」「賠」前綴
     s = s.replace(/剩下|共有|共|約|相差|合計|一共|總共|結果是|答案是|等於|得(?=\d)/g, '');
 
-    // P4：逗號前後冗餘空白
+    // P6：逗號前後冗餘空白
     s = s.replace(/\s*，\s*/g, '，');
 
-    // P5：數字與中文單位之間的空白（「9 段」→「9段」）
+    // P7：數字與中文單位之間的空白（「9 段」→「9段」）
     s = s.replace(/(\d)\s+([\u4E00-\u9FFF])/g, '$1$2');
     s = s.replace(/([\u4E00-\u9FFF])\s+(\d)/g, '$1$2');
 
-    // P6：移除首尾空白
+    // P8：移除首尾空白
     s = s.trim();
 
     return s;
   }
 
-  return {
-    userNorm:    pipeline(userInput),
-    correctNorm: pipeline(String(correctAnswer)),
-  };
+  /* ── 特殊情況：純同義詞答案（無數字）
+     學童只答「一樣」或「相同」而沒有附上數字，
+     且正確答案的核心是「相等，差0」→ 等值接受。
+     原理：pipeline 後正確答案會變成「相等，0公尺」等；
+           若學童只答「相等」（原為一樣/相同），視為等值。  */
+  const uNorm = pipeline(userInput);
+  const cNorm = pipeline(String(correctAnswer));
+
+  // 若正確答案含「相等」且含「0」，而學童答案是純「相等」→ 接受
+  if (uNorm === '相等' && cNorm.includes('相等') && /，?0/.test(cNorm)) {
+    return { userNorm: cNorm, correctNorm: cNorm }; // 強制等值
+  }
+
+  return { userNorm: uNorm, correctNorm: cNorm };
 }
 
 /* ════════════════════════════════════════════════════════════════
@@ -944,7 +971,10 @@ window.showAssessment = function showAssessment() {
 
       <!-- 八大單元勝率 -->
       <h3 style="font-family:'Noto Serif TC',serif;font-size:1rem;color:#1A2D5A;
-        margin-bottom:1rem;">📊 各單元作答勝率</h3>
+        margin-bottom:0.4rem;">📊 各單元作答勝率</h3>
+      <p style="font-size:0.72rem;color:#bbb;margin-bottom:1rem;line-height:1.6;">
+        ※ 統計從首次使用覺醒評鑑功能後開始累積，歷史答題不回溯。
+      </p>
       ${rowsHTML}
 
       <!-- 弱點分析 -->
